@@ -1,6 +1,6 @@
 -- ============================================================
--- 🔥 PRO ESP + AIMBOT (ДЛЯ DESERT EAGLE)
--- Версия: 13.0
+-- 🔥 PRO ESP + AIMBOT (С ОРИГИНАЛЬНЫМ МЕХАНИЗМОМ СТРЕЛЬБЫ)
+-- Версия: 16.0
 -- ============================================================
 
 -- 🔓 БАЙПАС
@@ -30,34 +30,31 @@ local TeleportService = game:GetService("TeleportService")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
-local Mouse = LocalPlayer:GetMouse()
 
 local AimbotEnabled = true
 local ESPEnabled = false
-local WallbangEnabled = false
 local MaxDistance = 300
 local ESPRadius = 300
 local ESPObjects = {}
 
-local WeaponScript = nil
+-- ============================================================
+-- 🔫 ОРИГИНАЛЬНЫЙ КОД ВЫСТРЕЛА (КАК В ПИСТОЛЕТЕ)
+-- ============================================================
+
 local WeaponController = nil
-local WeaponConnected = false
+local CurrentWeapon = nil
 
--- ============================================================
--- 🔫 ПОДКЛЮЧЕНИЕ К DESERT EAGLE
--- ============================================================
-
+-- Функция поиска Desert Eagle в руках
 local function findDesertEagle()
     if not LocalPlayer.Character then return nil end
     
-    -- Ищем Desert Eagle в персонаже
     for _, child in pairs(LocalPlayer.Character:GetChildren()) do
         if child.Name == "Desert Eagle" then
             return child
         end
     end
     
-    -- Если не нашли в Character, ищем в Backpack
+    -- Ищем в Backpack
     for _, child in pairs(LocalPlayer.Backpack:GetChildren()) do
         if child.Name == "Desert Eagle" then
             return child
@@ -67,93 +64,41 @@ local function findDesertEagle()
     return nil
 end
 
-local function getWeaponScript()
+-- Функция создания контроллера (как в оригинальном скрипте)
+local function createWeaponController()
     local weapon = findDesertEagle()
-    if not weapon then return nil end
-    
-    -- Ищем папку Scripts внутри Desert Eagle
-    local scriptsFolder = weapon:FindFirstChild("Scripts")
-    if scriptsFolder then
-        -- Ищем локальный скрипт внутри папки
-        for _, child in pairs(scriptsFolder:GetChildren()) do
-            if child:IsA("LocalScript") then
-                return child
-            end
-        end
-    end
-    
-    -- Если папки Scripts нет, ищем скрипт прямо в Desert Eagle
-    for _, child in pairs(weapon:GetChildren()) do
-        if child:IsA("LocalScript") or child:IsA("Script") then
-            return child
-        end
-    end
-    
-    return nil
-end
-
-local function connectWeapon()
-    if WeaponConnected then return end
-    
-    WeaponScript = getWeaponScript()
-    if WeaponScript then
-        WeaponConnected = true
-        print("🔫 Desert Eagle найден! Скрипт: " .. WeaponScript.Name)
-        
-        -- Пытаемся загрузить BlasterController через скрипт
-        pcall(function()
-            local BlasterController = require(ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Scripts"):WaitForChild("BlasterController"))
-            if BlasterController then
-                local weapon = findDesertEagle()
-                if weapon then
-                    WeaponController = BlasterController.new(weapon)
-                    print("✅ BlasterController создан!")
-                end
-            end
-        end)
-    else
+    if not weapon then
         print("⚠️ Desert Eagle не найден!")
+        return false
     end
-end
-
--- Следим за появлением Desert Eagle
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(1)
-    WeaponConnected = false
-    WeaponScript = nil
-    WeaponController = nil
-    connectWeapon()
-end)
-
--- Пробуем подключиться сразу
-task.wait(1)
-connectWeapon()
-
--- ============================================================
--- 🔥 WALLBANG
--- ============================================================
-
-local oldFindPartOnRay = workspace.FindPartOnRay
-
-local function enableWallbang()
-    WallbangEnabled = true
-    workspace.FindPartOnRay = function(ray, ignore, ...)
-        if WallbangEnabled then
-            local result = oldFindPartOnRay(ray, ignore, ...)
-            if result and result:IsA("BasePart") and result.CanCollide and not result.Parent:FindFirstChild("Humanoid") then
-                return nil
-            end
-            return result
+    
+    CurrentWeapon = weapon
+    
+    -- ТОЧНО ТАК ЖЕ, КАК В ОРИГИНАЛЬНОМ СКРИПТЕ
+    pcall(function()
+        local BlasterController = require(ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Scripts"):WaitForChild("BlasterController"))
+        if BlasterController then
+            WeaponController = BlasterController.new(weapon)
+            print("✅ Desert Eagle подключён! Контроллер создан.")
+            return true
         end
-        return oldFindPartOnRay(ray, ignore, ...)
-    end
-    print("🧱 Wallbang включён!")
+    end)
+    
+    return false
 end
 
-local function disableWallbang()
-    WallbangEnabled = false
-    workspace.FindPartOnRay = oldFindPartOnRay
-    print("🧱 Wallbang выключен.")
+-- ============================================================
+-- 🔫 ФУНКЦИЯ ВЫСТРЕЛА
+-- ============================================================
+
+local function shoot()
+    if WeaponController and WeaponController.Shoot then
+        pcall(function()
+            WeaponController:Shoot()
+        end)
+        return true
+    end
+    return false
 end
 
 -- ============================================================
@@ -193,14 +138,6 @@ local function getClosestEnemy()
 
         local distance = (head.Position - Camera.CFrame.Position).Magnitude
 
-        if not WallbangEnabled then
-            local ray = Ray.new(Camera.CFrame.Position, (head.Position - Camera.CFrame.Position).Unit * distance)
-            local hit, _ = workspace:FindPartOnRay(ray, LocalPlayer.Character, false, true)
-            if hit and not hit:IsDescendantOf(player.Character) then
-                continue
-            end
-        end
-
         if distance <= shortestDistance then
             closestEnemy = player
             shortestDistance = distance
@@ -211,15 +148,41 @@ local function getClosestEnemy()
 end
 
 -- ============================================================
--- 🔫 АИМБОТ + СТРЕЛЬБА
+-- 🔫 АИМБОТ + АВТО-СТРЕЛЬБА
 -- ============================================================
 
 local lastShotTime = 0
 local shootCooldown = 0.08
 
+-- Подключаемся к оружию
+createWeaponController()
+
+-- Если не подключились сразу — пробуем снова
+task.spawn(function()
+    while true do
+        task.wait(2)
+        if not WeaponController then
+            createWeaponController()
+        end
+    end
+end)
+
+-- Следим за появлением оружия после респавна
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    WeaponController = nil
+    CurrentWeapon = nil
+    createWeaponController()
+end)
+
 RunService.RenderStepped:Connect(function()
     if not AimbotEnabled then return end
     if not LocalPlayer.Character then return end
+    
+    -- Если контроллер потерялся — ищем заново
+    if not WeaponController then
+        createWeaponController()
+    end
     
     local target = getClosestEnemy()
     if not target then return end
@@ -227,38 +190,13 @@ RunService.RenderStepped:Connect(function()
     local head = target.Character:FindFirstChild("Head")
     if not head then return end
     
+    -- Наводим камеру
     Camera.CFrame = CFrame.new(Camera.CFrame.Position, head.Position)
     
-    -- ═══════════════════════════════════════════════
-    -- 🔫 СТРЕЛЬБА ЧЕРЕЗ BLASTERCONTROLLER
-    -- ═══════════════════════════════════════════════
+    -- 🔫 АВТО-СТРЕЛЬБА
     local currentTime = tick()
     if currentTime - lastShotTime >= shootCooldown then
-        
-        -- Способ 1: Через BlasterController
-        if WeaponController and WeaponController.Shoot then
-            pcall(function()
-                WeaponController:Shoot()
-                lastShotTime = currentTime
-            end)
-        
-        -- Способ 2: Через окружение скрипта
-        elseif WeaponScript then
-            pcall(function()
-                local env = getfenv(WeaponScript)
-                if env and env.Shoot then
-                    env.Shoot()
-                elseif env and env.Fire then
-                    env.Fire()
-                end
-                lastShotTime = currentTime
-            end)
-            
-        -- Способ 3: Через клик мыши
-        else
-            Mouse.Button1Down:Fire()
-            task.wait(0.02)
-            Mouse.Button1Up:Fire()
+        if shoot() then
             lastShotTime = currentTime
         end
     end
@@ -353,8 +291,8 @@ local function createGUI()
     ScreenGui.IgnoreGuiInset = true
 
     local MainFrame = Instance.new("Frame")
-    MainFrame.Size = UDim2.new(0, 300, 0, 320)
-    MainFrame.Position = UDim2.new(0.5, -150, 0.5, -160)
+    MainFrame.Size = UDim2.new(0, 300, 0, 280)
+    MainFrame.Position = UDim2.new(0.5, -150, 0.5, -140)
     MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     MainFrame.BackgroundTransparency = 0.15
     MainFrame.BorderSizePixel = 2
@@ -400,7 +338,7 @@ local function createGUI()
     -- Aimbot
     local AimbotButton = Instance.new("TextButton")
     AimbotButton.Size = UDim2.new(0, 250, 0, 40)
-    AimbotButton.Position = UDim2.new(0.5, -125, 0, 50)
+    AimbotButton.Position = UDim2.new(0.5, -125, 0, 55)
     AimbotButton.Name = "Aimbot"
     updateButton(AimbotButton, AimbotEnabled)
     AimbotButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -417,35 +355,10 @@ local function createGUI()
         updateButton(AimbotButton, AimbotEnabled)
     end)
 
-    -- Wallbang
-    local WallbangButton = Instance.new("TextButton")
-    WallbangButton.Size = UDim2.new(0, 250, 0, 40)
-    WallbangButton.Position = UDim2.new(0.5, -125, 0, 100)
-    WallbangButton.Name = "Wallbang"
-    updateButton(WallbangButton, WallbangEnabled)
-    WallbangButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    WallbangButton.Font = Enum.Font.GothamBold
-    WallbangButton.BorderSizePixel = 0
-    WallbangButton.Parent = MainFrame
-
-    local wallCorner = Instance.new("UICorner")
-    wallCorner.Parent = WallbangButton
-    wallCorner.CornerRadius = UDim.new(0, 8)
-
-    WallbangButton.MouseButton1Click:Connect(function()
-        WallbangEnabled = not WallbangEnabled
-        updateButton(WallbangButton, WallbangEnabled)
-        if WallbangEnabled then
-            enableWallbang()
-        else
-            disableWallbang()
-        end
-    end)
-
     -- ESP
     local ESPButton = Instance.new("TextButton")
     ESPButton.Size = UDim2.new(0, 250, 0, 40)
-    ESPButton.Position = UDim2.new(0.5, -125, 0, 150)
+    ESPButton.Position = UDim2.new(0.5, -125, 0, 105)
     ESPButton.Name = "ESP"
     updateButton(ESPButton, ESPEnabled)
     ESPButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -465,7 +378,7 @@ local function createGUI()
     -- Rejoin
     local RejoinButton = Instance.new("TextButton")
     RejoinButton.Size = UDim2.new(0, 250, 0, 40)
-    RejoinButton.Position = UDim2.new(0.5, -125, 0, 200)
+    RejoinButton.Position = UDim2.new(0.5, -125, 0, 155)
     RejoinButton.Text = "Rejoin"
     RejoinButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     RejoinButton.Font = Enum.Font.GothamBold
@@ -482,7 +395,7 @@ local function createGUI()
     -- Exit
     local ExitButton = Instance.new("TextButton")
     ExitButton.Size = UDim2.new(0, 250, 0, 40)
-    ExitButton.Position = UDim2.new(0.5, -125, 0, 250)
+    ExitButton.Position = UDim2.new(0.5, -125, 0, 205)
     ExitButton.Text = "Exit"
     ExitButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     ExitButton.Font = Enum.Font.GothamBold
@@ -516,10 +429,9 @@ LocalPlayer.CharacterAdded:Connect(function()
     if not CoreGui:FindFirstChild("M") then
         guiInstance = createGUI()
     end
-    WeaponConnected = false
-    WeaponScript = nil
     WeaponController = nil
-    connectWeapon()
+    CurrentWeapon = nil
+    createWeaponController()
 end)
 
 -- ============================================================
@@ -553,26 +465,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         AimbotEnabled = not AimbotEnabled
         updateButton(AimbotButton, AimbotEnabled)
     end
-
-    if input.KeyCode == Enum.KeyCode.L then
-        WallbangEnabled = not WallbangEnabled
-        updateButton(WallbangButton, WallbangEnabled)
-        if WallbangEnabled then
-            enableWallbang()
-            game.StarterGui:SetCore("SendNotification", {
-                Title = "Wallbang",
-                Text = "Включён!",
-                Duration = 1.5
-            })
-        else
-            disableWallbang()
-            game.StarterGui:SetCore("SendNotification", {
-                Title = "Wallbang",
-                Text = "Выключен",
-                Duration = 1.5
-            })
-        end
-    end
 end)
 
 -- ============================================================
@@ -583,5 +475,4 @@ print("🔥 PRO + DESERT EAGLE загружен!")
 print("🔹 Shift — меню")
 print("🔹 G — ESP")
 print("🔹 H — Аимбот (с авто-стрельбой)")
-print("🔹 L — Wallbang")
-print("🔫 Desert Eagle найден: " .. tostring(WeaponScript ~= nil))
+print("🔫 Desert Eagle подключён: " .. tostring(WeaponController ~= nil))
