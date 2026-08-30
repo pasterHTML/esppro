@@ -1,352 +1,332 @@
 -- ============================================================
--- 🎯 PRO ESP + AIMBOT
--- GitHub Version
+-- 🔥 PRO ESP + AIMBOT (ОБЪЕДИНЁННЫЙ)
+-- Версия: 3.0
 -- ============================================================
 
--- Байпас
-print("🔓 Запуск байпаса...")
-local bypassed = 0
-for i, v in next, getgc(true) do
-    if typeof(v) == 'function' and getfenv(v).script and getfenv(v).script.Parent == nil then
-        if not isourclosure(v) then
-            local source = debug.info(v, 's')
-            if source ~= '[C]' and not source:find('Network') and not source:find('PlayerGui.Client') then
-                pcall(function()
-                    hookfunction(v, function()
-                        return coroutine.yield()
-                    end)
-                    bypassed = bypassed + 1
-                end)
-            end
-        end
-    end
-end
-print("🔓 Байпас завершён! Заменено функций: " .. bypassed)
+-- ============================================================
+-- ⚙️ ПЕРЕМЕННЫЕ
+-- ============================================================
 
--- Основной скрипт
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
-local player = Players.LocalPlayer
-local camera = workspace.CurrentCamera
+local TeleportService = game:GetService("TeleportService")
 
-local espEnabled = false
-local aimbotEnabled = false
-local espData = {}
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 
--- GUI
-local gui = Instance.new("ScreenGui")
-gui.Name = "ProESP"
-gui.Parent = CoreGui
-gui.ResetOnSpawn = false
+local AimbotEnabled = true
+local ESPEnabled = false
+local MaxDistance = 300
 
-local mainFrame = Instance.new("Frame")
-mainFrame.Parent = gui
-mainFrame.Size = UDim2.new(0, 200, 0, 80)
-mainFrame.Position = UDim2.new(0.5, -100, 0.5, -40)
-mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-mainFrame.BackgroundTransparency = 0.15
-mainFrame.BorderSizePixel = 0
-mainFrame.Visible = true
+local ESPObjects = {}
+local ESPLines = {}
+
+-- ============================================================
+-- 🎯 ФУНКЦИЯ ПРОВЕРКИ ВРАГА
+-- ============================================================
+
+local function isEnemy(player)
+    if player.Team and LocalPlayer.Team then
+        return player.Team ~= LocalPlayer.Team
+    end
+    return true
+end
+
+-- ============================================================
+-- 🎯 ФУНКЦИЯ НАХОЖДЕНИЯ БЛИЖАЙШЕГО ВРАГА
+-- ============================================================
+
+local function getClosestEnemy()
+    local closestEnemy = nil
+    local shortestDistance = MaxDistance
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") and isEnemy(player) then
+            local head = player.Character.Head
+            local distance = (head.Position - Camera.CFrame.Position).Magnitude
+
+            -- Проверка видимости (не за стеной)
+            local ray = Ray.new(Camera.CFrame.Position, (head.Position - Camera.CFrame.Position).Unit * distance)
+            local hit, _ = workspace:FindPartOnRay(ray, LocalPlayer.Character, false, true)
+
+            if distance <= shortestDistance and (not hit or hit:IsDescendantOf(player.Character)) then
+                closestEnemy = player
+                shortestDistance = distance
+            end
+        end
+    end
+
+    return closestEnemy
+end
+
+-- ============================================================
+-- 🟢 ESP
+-- ============================================================
+
+local function toggleESP()
+    ESPEnabled = not ESPEnabled
+
+    -- Удаляем старые ESP
+    for _, v in pairs(ESPObjects) do
+        if v then pcall(function() v:Destroy() end) end
+    end
+    ESPObjects = {}
+
+    -- Удаляем старые линии
+    for _, v in pairs(ESPLines) do
+        if v then pcall(function() v:Destroy() end) end
+    end
+    ESPLines = {}
+
+    if ESPEnabled then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character and isEnemy(player) then
+                local char = player.Character
+
+                -- Обводка тела (BoxHandleAdornment)
+                local box = Instance.new("BoxHandleAdornment")
+                box.Size = char:GetExtentsSize()
+                box.Adornee = char
+                box.AlwaysOnTop = true
+                box.ZIndex = 10
+                box.Color3 = Color3.new(1, 0, 0)
+                box.Transparency = 0.5
+                box.Parent = char
+                table.insert(ESPObjects, box)
+
+                -- Highlight (подсветка частей тела)
+                for _, part in ipairs(char:GetChildren()) do
+                    if part:IsA("BasePart") then
+                        local highlight = Instance.new("Highlight")
+                        highlight.Parent = part
+                        highlight.Adornee = part
+                        highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                        highlight.FillTransparency = 0.5
+                        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                        highlight.OutlineTransparency = 0
+                        table.insert(ESPObjects, highlight)
+                    end
+                end
+
+                -- Линия к голове
+                local line = Drawing.new("Line")
+                line.Color = Color3.new(1, 0, 0)
+                line.Thickness = 2
+                line.Transparency = 1
+                line.Visible = true
+
+                table.insert(ESPLines, line)
+
+                -- Обновление линии через RenderStepped
+                local conn
+                conn = RunService.RenderStepped:Connect(function()
+                    if not ESPEnabled or not player.Character or not player.Character:FindFirstChild("Head") then
+                        line.Visible = false
+                        return
+                    end
+
+                    local headPos = Camera:WorldToViewportPoint(player.Character.Head.Position)
+                    line.From = Vector2.new(Camera.ViewportSize.X / 2, 0)
+                    line.To = Vector2.new(headPos.X, headPos.Y)
+                    line.Visible = true
+                end)
+
+                table.insert(ESPObjects, conn)
+            end
+        end
+    end
+end
+
+-- ============================================================
+-- 🎯 АИМБОТ
+-- ============================================================
+
+RunService.RenderStepped:Connect(function()
+    if AimbotEnabled then
+        local target = getClosestEnemy()
+        if target and target.Character and target.Character:FindFirstChild("Head") then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
+        end
+    end
+end)
+
+-- ============================================================
+-- 🔄 ПЕРЕЗАХОД НА СЕРВЕР
+-- ============================================================
+
+local function rejoinServer()
+    local placeId = game.PlaceId
+    TeleportService:Teleport(placeId, LocalPlayer, {})
+end
+
+-- ============================================================
+-- 📊 GUI (КОРЕГУИ - НЕ ПРОПАДАЕТ)
+-- ============================================================
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ProESP_GUI"
+ScreenGui.Parent = CoreGui
+ScreenGui.ResetOnSpawn = false
+
+-- ===== ГЛАВНОЕ МЕНЮ =====
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 300, 0, 280)
+MainFrame.Position = UDim2.new(0.5, -150, 0.5, -140)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+MainFrame.BackgroundTransparency = 0.15
+MainFrame.BorderSizePixel = 2
+MainFrame.BorderColor3 = Color3.fromRGB(255, 0, 0)
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
 
 local corner = Instance.new("UICorner")
-corner.Parent = mainFrame
+corner.Parent = MainFrame
 corner.CornerRadius = UDim.new(0, 12)
 
-local title = Instance.new("TextLabel")
-title.Parent = mainFrame
-title.Size = UDim2.new(1, 0, 0, 30)
-title.Position = UDim2.new(0, 0, 0, 5)
-title.BackgroundTransparency = 1
-title.Text = "🎯 PRO ESP"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.TextSize = 18
-title.Font = Enum.Font.GothamBold
+-- ===== ЗАГОЛОВОК =====
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.Position = UDim2.new(0, 0, 0, 5)
+Title.BackgroundTransparency = 1
+Title.Text = "🔥 PRO ESP + AIMBOT"
+Title.TextSize = 20
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.GothamBold
+Title.Parent = MainFrame
 
-local espBtn = Instance.new("TextButton")
-espBtn.Parent = mainFrame
-espBtn.Size = UDim2.new(0, 80, 0, 30)
-espBtn.Position = UDim2.new(0.05, 0, 0.55, 0)
-espBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
-espBtn.Text = "ESP: OFF"
-espBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-espBtn.TextSize = 14
-espBtn.Font = Enum.Font.GothamBold
-espBtn.BorderSizePixel = 0
+-- ===== КНОПКА ЗАКРЫТИЯ =====
+local CloseButton = Instance.new("TextButton")
+CloseButton.Size = UDim2.new(0, 30, 0, 30)
+CloseButton.Position = UDim2.new(1, -35, 0, 5)
+CloseButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+CloseButton.Text = "✕"
+CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseButton.TextSize = 16
+CloseButton.Font = Enum.Font.GothamBold
+CloseButton.BorderSizePixel = 0
+CloseButton.Parent = MainFrame
 
-local espCorner = Instance.new("UICorner")
-espCorner.Parent = espBtn
-espCorner.CornerRadius = UDim.new(0, 6)
+local closeCorner = Instance.new("UICorner")
+closeCorner.Parent = CloseButton
+closeCorner.CornerRadius = UDim.new(0, 6)
 
-local aimBtn = Instance.new("TextButton")
-aimBtn.Parent = mainFrame
-aimBtn.Size = UDim2.new(0, 80, 0, 30)
-aimBtn.Position = UDim2.new(0.5, 10, 0.55, 0)
-aimBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
-aimBtn.Text = "AIM: OFF"
-aimBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-aimBtn.TextSize = 14
-aimBtn.Font = Enum.Font.GothamBold
-aimBtn.BorderSizePixel = 0
+-- ===== ФУНКЦИЯ ОБНОВЛЕНИЯ КНОПОК =====
+local function updateButton(button, state)
+    button.Text = state and button.Name .. ": ON" or button.Name .. ": OFF"
+    button.BackgroundColor3 = state and Color3.fromRGB(0, 150, 50) or Color3.fromRGB(150, 50, 50)
+end
+
+-- ===== КНОПКА Aimbot =====
+local AimbotButton = Instance.new("TextButton")
+AimbotButton.Size = UDim2.new(0, 250, 0, 40)
+AimbotButton.Position = UDim2.new(0.5, -125, 0, 55)
+AimbotButton.Name = "Aimbot"
+updateButton(AimbotButton, AimbotEnabled)
+AimbotButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+AimbotButton.Font = Enum.Font.GothamBold
+AimbotButton.BorderSizePixel = 0
+AimbotButton.Parent = MainFrame
 
 local aimCorner = Instance.new("UICorner")
-aimCorner.Parent = aimBtn
-aimCorner.CornerRadius = UDim.new(0, 6)
+aimCorner.Parent = AimbotButton
+aimCorner.CornerRadius = UDim.new(0, 8)
 
--- Drag
-local dragging = false
-local dragStart = nil
-local startPos = nil
-
-mainFrame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPos = mainFrame.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
-    end
+AimbotButton.MouseButton1Click:Connect(function()
+    AimbotEnabled = not AimbotEnabled
+    updateButton(AimbotButton, AimbotEnabled)
 end)
 
-mainFrame.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement and dragging then
-        local delta = input.Position - dragStart
-        mainFrame.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
-        )
-    end
+-- ===== КНОПКА ESP =====
+local ESPButton = Instance.new("TextButton")
+ESPButton.Size = UDim2.new(0, 250, 0, 40)
+ESPButton.Position = UDim2.new(0.5, -125, 0, 105)
+ESPButton.Name = "ESP"
+updateButton(ESPButton, ESPEnabled)
+ESPButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ESPButton.Font = Enum.Font.GothamBold
+ESPButton.BorderSizePixel = 0
+ESPButton.Parent = MainFrame
+
+local espCorner = Instance.new("UICorner")
+espCorner.Parent = ESPButton
+espCorner.CornerRadius = UDim.new(0, 8)
+
+ESPButton.MouseButton1Click:Connect(function()
+    toggleESP()
+    updateButton(ESPButton, ESPEnabled)
 end)
 
--- Бинды
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    
-    if input.KeyCode == Enum.KeyCode.G then
-        espEnabled = not espEnabled
-        espBtn.Text = espEnabled and "ESP: ON" or "ESP: OFF"
-        espBtn.BackgroundColor3 = espEnabled and Color3.fromRGB(0, 150, 50) or Color3.fromRGB(40, 40, 60)
-        
-        if not espEnabled then
-            for plr, data in pairs(espData) do
-                pcall(function()
-                    if data.highlight then data.highlight:Destroy() end
-                    if data.billboard then data.billboard:Destroy() end
-                end)
-            end
-            espData = {}
-        end
-    end
-    
-    if input.KeyCode == Enum.KeyCode.H then
-        aimbotEnabled = not aimbotEnabled
-        aimBtn.Text = aimbotEnabled and "AIM: ON" or "AIM: OFF"
-        aimBtn.BackgroundColor3 = aimbotEnabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(40, 40, 60)
-    end
+-- ===== КНОПКА REJOIN =====
+local RejoinButton = Instance.new("TextButton")
+RejoinButton.Size = UDim2.new(0, 250, 0, 40)
+RejoinButton.Position = UDim2.new(0.5, -125, 0, 155)
+RejoinButton.Text = "Rejoin Server"
+RejoinButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+RejoinButton.Font = Enum.Font.GothamBold
+RejoinButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+RejoinButton.BorderSizePixel = 0
+RejoinButton.Parent = MainFrame
+
+local rejoinCorner = Instance.new("UICorner")
+rejoinCorner.Parent = RejoinButton
+rejoinCorner.CornerRadius = UDim.new(0, 8)
+
+RejoinButton.MouseButton1Click:Connect(function()
+    rejoinServer()
 end)
 
--- ESP
-local function createESP(plr)
-    if plr == player then return end
-    if not plr.Character then return end
-    
-    local character = plr.Character
-    local head = character:FindFirstChild("Head")
-    local hrp = character:FindFirstChild("HumanoidRootPart")
-    if not head or not hrp then return end
-    
-    if espData[plr] then
-        pcall(function()
-            if espData[plr].highlight then espData[plr].highlight:Destroy() end
-            if espData[plr].billboard then espData[plr].billboard:Destroy() end
-        end)
-        espData[plr] = nil
-    end
-    
-    local highlight = Instance.new("Highlight")
-    highlight.Parent = character
-    highlight.FillColor = Color3.fromRGB(100, 200, 255)
-    highlight.FillTransparency = 0.7
-    highlight.OutlineColor = Color3.fromRGB(0, 150, 255)
-    highlight.OutlineTransparency = 0.1
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    
-    local billboard = Instance.new("BillboardGui")
-    billboard.Parent = head
-    billboard.Adornee = head
-    billboard.Size = UDim2.new(0, 150, 0, 40)
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
-    billboard.AlwaysOnTop = true
-    billboard.MaxDistance = 200
-    
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Parent = billboard
-    nameLabel.Size = UDim2.new(1, 0, 1, 0)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.Text = plr.Name
-    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    nameLabel.TextSize = 18
-    nameLabel.TextScaled = true
-    nameLabel.Font = Enum.Font.GothamBold
-    nameLabel.TextStrokeTransparency = 0.2
-    nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    
-    local healthBar = Instance.new("Frame")
-    healthBar.Parent = billboard
-    healthBar.Size = UDim2.new(1, 0, 0, 4)
-    healthBar.Position = UDim2.new(0, 0, 1, 2)
-    healthBar.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    healthBar.BorderSizePixel = 0
-    
-    local healthFill = Instance.new("Frame")
-    healthFill.Parent = healthBar
-    healthFill.Size = UDim2.new(1, 0, 1, 0)
-    healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
-    healthFill.BorderSizePixel = 0
-    
-    local healthCorner = Instance.new("UICorner")
-    healthCorner.Parent = healthBar
-    healthCorner.CornerRadius = UDim.new(0, 2)
-    
-    espData[plr] = {
-        highlight = highlight,
-        billboard = billboard,
-        nameLabel = nameLabel,
-        healthFill = healthFill,
-        healthBar = healthBar
-    }
-end
+-- ===== КНОПКА CLEAR REPORTS =====
+local ClearButton = Instance.new("TextButton")
+ClearButton.Size = UDim2.new(0, 250, 0, 40)
+ClearButton.Position = UDim2.new(0.5, -125, 0, 205)
+ClearButton.Text = "Clear Reports (Exit)"
+ClearButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ClearButton.Font = Enum.Font.GothamBold
+ClearButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+ClearButton.BorderSizePixel = 0
+ClearButton.Parent = MainFrame
 
-local function updateESP()
-    if not espEnabled then return
-    
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= player and plr.Character then
-            if not espData[plr] or not espData[plr].highlight or not espData[plr].highlight.Parent then
-                createESP(plr)
-            end
-            
-            local data = espData[plr]
-            if data and data.healthFill then
-                local humanoid = plr.Character:FindFirstChild("Humanoid")
-                if humanoid then
-                    local healthPercent = humanoid.Health / humanoid.MaxHealth
-                    data.healthFill.Size = UDim2.new(healthPercent, 0, 1, 0)
-                    data.healthFill.BackgroundColor3 = healthPercent > 0.5 and Color3.fromRGB(0, 255, 100) or 
-                                                       healthPercent > 0.25 and Color3.fromRGB(255, 200, 0) or 
-                                                       Color3.fromRGB(255, 50, 50)
-                end
-            end
-        end
-    end
-end
+local clearCorner = Instance.new("UICorner")
+clearCorner.Parent = ClearButton
+clearCorner.CornerRadius = UDim.new(0, 8)
 
-local function setupPlayer(plr)
-    if plr == player then return end
-    
-    plr.CharacterAdded:Connect(function()
-        task.wait(0.5)
-        if espEnabled then
-            createESP(plr)
-        end
-    end)
-    
-    if plr.Character and espEnabled then
-        task.wait(0.3)
-        createESP(plr)
-    end
-end
-
-Players.PlayerAdded:Connect(function(plr)
-    setupPlayer(plr)
+ClearButton.MouseButton1Click:Connect(function()
+    game:Shutdown()
 end)
 
-for _, plr in pairs(Players:GetPlayers()) do
-    if plr ~= player then
-        setupPlayer(plr)
-    end
-end
-
-RunService.RenderStepped:Connect(function()
-    if espEnabled then
-        updateESP()
-    end
+-- ===== ЗАКРЫТИЕ GUI =====
+CloseButton.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
 end)
 
--- Аимбот
-local function getClosestAlivePlayer()
-    local closest = nil
-    local minDist = math.huge
-    
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr == player then continue end
-        if not plr.Character then continue end
-        
-        local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-        local humanoid = plr.Character:FindFirstChild("Humanoid")
-        if not hrp or not humanoid then continue end
-        if humanoid.Health <= 0 then continue end
-        
-        local head = plr.Character:FindFirstChild("Head")
-        if not head then continue end
-        
-        local rayParams = RaycastParams.new()
-        rayParams.FilterDescendantsInstances = {player.Character, plr.Character}
-        rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-        
-        local origin = camera.CFrame.Position
-        local direction = (head.Position - origin).Unit * 500
-        local result = workspace:Raycast(origin, direction, rayParams)
-        
-        if result and not result.Instance:IsDescendantOf(plr.Character) then
-            continue
-        end
-        
-        local dist = (hrp.Position - camera.CFrame.Position).Magnitude
-        if dist < minDist then
-            minDist = dist
-            closest = plr
-        end
-    end
-    
-    return closest
-end
-
-local function aimbot()
-    if not aimbotEnabled then return end
-    if not player.Character then return end
-    
-    local target = getClosestAlivePlayer()
-    if not target then return end
-    
-    local head = target.Character:FindFirstChild("Head")
-    local hrp = target.Character:FindFirstChild("HumanoidRootPart")
-    local targetPos = head and head.Position or (hrp and hrp.Position)
-    
-    if targetPos then
-        camera.CFrame = CFrame.new(camera.CFrame.Position, targetPos)
-    end
-end
-
-RunService.RenderStepped:Connect(function()
-    aimbot()
-end)
-
--- Открытие/закрытие GUI (Правый Shift)
+-- ===== ОТКРЫТИЕ GUI (Правый Shift) =====
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.RightShift then
-        mainFrame.Visible = not mainFrame.Visible
+        MainFrame.Visible = not MainFrame.Visible
     end
 end)
 
-print("🎯 PRO ESP + AIMBOT загружен!")
+-- ============================================================
+-- 👥 НОВЫЕ ИГРОКИ
+-- ============================================================
+
+Players.PlayerAdded:Connect(function()
+    if ESPEnabled then
+        toggleESP()
+        toggleESP()
+    end
+end)
+
+-- ============================================================
+-- 📌 ИНФОРМАЦИЯ
+-- ============================================================
+
+print("🔥 PRO ESP + AIMBOT загружен!")
 print("🔹 Правый Shift — показать/скрыть меню")
-print("🔹 G — включить/выключить ESP")
-print("🔹 H — включить/выключить Аимбот")
+print("🔹 Кнопки в меню — управление функциями")
+print("🎯 Aimbot наводится на врагов (не за стеной)")
+print("🟢 ESP показывает врагов (красный)")
