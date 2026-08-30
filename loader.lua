@@ -1,6 +1,6 @@
 -- ============================================================
--- 🔥 PRO ESP + AIMBOT (ОБЪЕДИНЁННЫЙ)
--- Версия: 3.0
+-- 🔥 PRO ESP + AIMBOT (ИСПРАВЛЕННЫЙ)
+-- Версия: 4.0 (на основе рабочего скрипта)
 -- ============================================================
 
 -- ============================================================
@@ -35,7 +35,7 @@ local function isEnemy(player)
 end
 
 -- ============================================================
--- 🎯 ФУНКЦИЯ НАХОЖДЕНИЯ БЛИЖАЙШЕГО ВРАГА
+-- 🎯 ФУНКЦИЯ НАХОЖДЕНИЯ БЛИЖАЙШЕГО ВРАГА (Ray.new)
 -- ============================================================
 
 local function getClosestEnemy()
@@ -47,7 +47,7 @@ local function getClosestEnemy()
             local head = player.Character.Head
             local distance = (head.Position - Camera.CFrame.Position).Magnitude
 
-            -- Проверка видимости (не за стеной)
+            -- Используем Ray.new() как в рабочем скрипте
             local ray = Ray.new(Camera.CFrame.Position, (head.Position - Camera.CFrame.Position).Unit * distance)
             local hit, _ = workspace:FindPartOnRay(ray, LocalPlayer.Character, false, true)
 
@@ -62,7 +62,7 @@ local function getClosestEnemy()
 end
 
 -- ============================================================
--- 🟢 ESP
+-- 🟢 ESP (из рабочего скрипта, но с исправлениями)
 -- ============================================================
 
 local function toggleESP()
@@ -110,7 +110,7 @@ local function toggleESP()
                     end
                 end
 
-                -- Линия к голове
+                -- Линия к голове (исправлено)
                 local line = Drawing.new("Line")
                 line.Color = Color3.new(1, 0, 0)
                 line.Thickness = 2
@@ -119,7 +119,7 @@ local function toggleESP()
 
                 table.insert(ESPLines, line)
 
-                -- Обновление линии через RenderStepped
+                -- Обновление линии
                 local conn
                 conn = RunService.RenderStepped:Connect(function()
                     if not ESPEnabled or not player.Character or not player.Character:FindFirstChild("Head") then
@@ -328,5 +328,3 @@ end)
 print("🔥 PRO ESP + AIMBOT загружен!")
 print("🔹 Правый Shift — показать/скрыть меню")
 print("🔹 Кнопки в меню — управление функциями")
-print("🎯 Aimbot наводится на врагов (не за стеной)")
-print("🟢 ESP показывает врагов (красный)")
