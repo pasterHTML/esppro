@@ -1,6 +1,7 @@
 -- ============================================================
--- 🔥 PRO ESP + AIMBOT (С АВТО-СТРЕЛЬБОЙ)
--- Версия: 8.1
+-- 🔥 PRO ESP + AIMBOT + WALLBANG
+-- Версия: 10.1
+-- Бинды: Shift (меню) | G (ESP) | H (Аимбот) | L (Wallbang)
 -- ============================================================
 
 -- 🔓 МЯГКИЙ БАЙПАС
@@ -33,9 +34,37 @@ local Mouse = LocalPlayer:GetMouse()
 
 local AimbotEnabled = true
 local ESPEnabled = false
+local WallbangEnabled = false
 local MaxDistance = 300
 local ESPRadius = 300
 local ESPObjects = {}
+
+-- ============================================================
+-- 🔥 WALLBANG (СТРЕЛЬБА ЧЕРЕЗ СТЕНЫ)
+-- ============================================================
+
+local oldFindPartOnRay = workspace.FindPartOnRay
+
+local function enableWallbang()
+    WallbangEnabled = true
+    workspace.FindPartOnRay = function(ray, ignore, ...)
+        if WallbangEnabled then
+            local result = oldFindPartOnRay(ray, ignore, ...)
+            if result and result:IsA("BasePart") and result.CanCollide and not result.Parent:FindFirstChild("Humanoid") then
+                return nil
+            end
+            return result
+        end
+        return oldFindPartOnRay(ray, ignore, ...)
+    end
+    print("🧱 Wallbang включён!")
+end
+
+local function disableWallbang()
+    WallbangEnabled = false
+    workspace.FindPartOnRay = oldFindPartOnRay
+    print("🧱 Wallbang выключен.")
+end
 
 -- ============================================================
 -- 🎯 ФУНКЦИИ ПРОВЕРКИ
@@ -74,10 +103,16 @@ local function getClosestEnemy()
 
         local distance = (head.Position - Camera.CFrame.Position).Magnitude
 
-        local ray = Ray.new(Camera.CFrame.Position, (head.Position - Camera.CFrame.Position).Unit * distance)
-        local hit, _ = workspace:FindPartOnRay(ray, LocalPlayer.Character, false, true)
+        -- Если Wallbang выключен — проверяем стены
+        if not WallbangEnabled then
+            local ray = Ray.new(Camera.CFrame.Position, (head.Position - Camera.CFrame.Position).Unit * distance)
+            local hit, _ = workspace:FindPartOnRay(ray, LocalPlayer.Character, false, true)
+            if hit and not hit:IsDescendantOf(player.Character) then
+                continue
+            end
+        end
 
-        if distance <= shortestDistance and (not hit or hit:IsDescendantOf(player.Character)) then
+        if distance <= shortestDistance then
             closestEnemy = player
             shortestDistance = distance
         end
@@ -87,14 +122,15 @@ local function getClosestEnemy()
 end
 
 -- ============================================================
--- 🔫 АИМБОТ + ВСТРОЕННЫЙ ТРИГГЕРБОТ (АВТО-СТРЕЛЬБА)
+-- 🔫 АИМБОТ + АВТО-СТРЕЛЬБА
 -- ============================================================
 
 local lastShotTime = 0
-local shootCooldown = 0.08  -- Задержка между выстрелами
+local shootCooldown = 0.08
 
 RunService.RenderStepped:Connect(function()
     if not AimbotEnabled then return end
+    if not LocalPlayer.Character then return end
     
     local target = getClosestEnemy()
     if not target then return end
@@ -102,15 +138,11 @@ RunService.RenderStepped:Connect(function()
     local head = target.Character:FindFirstChild("Head")
     if not head then return end
     
-    -- Наводим камеру на цель
     Camera.CFrame = CFrame.new(Camera.CFrame.Position, head.Position)
     
-    -- ═══════════════════════════════════════════════════════════
-    -- 🔫 АВТО-СТРЕЛЬБА (ВСТРОЕННЫЙ ТРИГГЕРБОТ)
-    -- ═══════════════════════════════════════════════════════════
+    -- Авто-стрельба
     local currentTime = tick()
     if currentTime - lastShotTime >= shootCooldown then
-        -- Стреляем
         Mouse.Button1Down:Fire()
         task.wait(0.02)
         Mouse.Button1Up:Fire()
@@ -209,8 +241,8 @@ local function createGUI()
     ScreenGui.IgnoreGuiInset = true
 
     local MainFrame = Instance.new("Frame")
-    MainFrame.Size = UDim2.new(0, 300, 0, 280)
-    MainFrame.Position = UDim2.new(0.5, -150, 0.5, -140)
+    MainFrame.Size = UDim2.new(0, 300, 0, 320)
+    MainFrame.Position = UDim2.new(0.5, -150, 0.5, -160)
     MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     MainFrame.BackgroundTransparency = 0.15
     MainFrame.BorderSizePixel = 2
@@ -253,10 +285,10 @@ local function createGUI()
         button.BackgroundColor3 = state and Color3.fromRGB(0, 150, 50) or Color3.fromRGB(150, 50, 50)
     end
 
-    -- Aimbot (с авто-стрельбой)
+    -- Aimbot
     local AimbotButton = Instance.new("TextButton")
     AimbotButton.Size = UDim2.new(0, 250, 0, 40)
-    AimbotButton.Position = UDim2.new(0.5, -125, 0, 55)
+    AimbotButton.Position = UDim2.new(0.5, -125, 0, 50)
     AimbotButton.Name = "Aimbot"
     updateButton(AimbotButton, AimbotEnabled)
     AimbotButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -273,10 +305,35 @@ local function createGUI()
         updateButton(AimbotButton, AimbotEnabled)
     end)
 
+    -- Wallbang
+    local WallbangButton = Instance.new("TextButton")
+    WallbangButton.Size = UDim2.new(0, 250, 0, 40)
+    WallbangButton.Position = UDim2.new(0.5, -125, 0, 100)
+    WallbangButton.Name = "Wallbang"
+    updateButton(WallbangButton, WallbangEnabled)
+    WallbangButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    WallbangButton.Font = Enum.Font.GothamBold
+    WallbangButton.BorderSizePixel = 0
+    WallbangButton.Parent = MainFrame
+
+    local wallCorner = Instance.new("UICorner")
+    wallCorner.Parent = WallbangButton
+    wallCorner.CornerRadius = UDim.new(0, 8)
+
+    WallbangButton.MouseButton1Click:Connect(function()
+        WallbangEnabled = not WallbangEnabled
+        updateButton(WallbangButton, WallbangEnabled)
+        if WallbangEnabled then
+            enableWallbang()
+        else
+            disableWallbang()
+        end
+    end)
+
     -- ESP
     local ESPButton = Instance.new("TextButton")
     ESPButton.Size = UDim2.new(0, 250, 0, 40)
-    ESPButton.Position = UDim2.new(0.5, -125, 0, 105)
+    ESPButton.Position = UDim2.new(0.5, -125, 0, 150)
     ESPButton.Name = "ESP"
     updateButton(ESPButton, ESPEnabled)
     ESPButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -296,7 +353,7 @@ local function createGUI()
     -- Rejoin
     local RejoinButton = Instance.new("TextButton")
     RejoinButton.Size = UDim2.new(0, 250, 0, 40)
-    RejoinButton.Position = UDim2.new(0.5, -125, 0, 155)
+    RejoinButton.Position = UDim2.new(0.5, -125, 0, 200)
     RejoinButton.Text = "Rejoin"
     RejoinButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     RejoinButton.Font = Enum.Font.GothamBold
@@ -313,7 +370,7 @@ local function createGUI()
     -- Exit
     local ExitButton = Instance.new("TextButton")
     ExitButton.Size = UDim2.new(0, 250, 0, 40)
-    ExitButton.Position = UDim2.new(0.5, -125, 0, 205)
+    ExitButton.Position = UDim2.new(0.5, -125, 0, 250)
     ExitButton.Text = "Exit"
     ExitButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     ExitButton.Font = Enum.Font.GothamBold
@@ -333,29 +390,11 @@ local function createGUI()
         MainFrame.Visible = false
     end)
 
-    UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
-
-        if input.KeyCode == Enum.KeyCode.RightShift then
-            MainFrame.Visible = not MainFrame.Visible
-        end
-
-        if input.KeyCode == Enum.KeyCode.G then
-            toggleESP()
-            updateButton(ESPButton, ESPEnabled)
-        end
-
-        if input.KeyCode == Enum.KeyCode.H then
-            AimbotEnabled = not AimbotEnabled
-            updateButton(AimbotButton, AimbotEnabled)
-        end
-    end)
-
     return ScreenGui
 end
 
 -- ============================================================
--- 👥 СОЗДАЁМ GUI С ЗАЩИТОЙ ОТ ПРОПАДАНИЯ
+-- 👥 СОЗДАЁМ GUI
 -- ============================================================
 
 local guiInstance = createGUI()
@@ -379,11 +418,58 @@ Players.PlayerAdded:Connect(function()
 end)
 
 -- ============================================================
+-- ⌨️ БИНДЫ
+-- ============================================================
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+
+    -- Правый Shift — меню
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        MainFrame.Visible = not MainFrame.Visible
+    end
+
+    -- G — ESP
+    if input.KeyCode == Enum.KeyCode.G then
+        toggleESP()
+        updateButton(ESPButton, ESPEnabled)
+    end
+
+    -- H — Аимбот
+    if input.KeyCode == Enum.KeyCode.H then
+        AimbotEnabled = not AimbotEnabled
+        updateButton(AimbotButton, AimbotEnabled)
+    end
+
+    -- L — Wallbang (стрельба через стены)
+    if input.KeyCode == Enum.KeyCode.L then
+        WallbangEnabled = not WallbangEnabled
+        updateButton(WallbangButton, WallbangEnabled)
+        if WallbangEnabled then
+            enableWallbang()
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "Wallbang",
+                Text = "Включён! Стреляй сквозь стены",
+                Duration = 1.5
+            })
+        else
+            disableWallbang()
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "Wallbang",
+                Text = "Выключен",
+                Duration = 1.5
+            })
+        end
+    end
+end)
+
+-- ============================================================
 -- 📌 ИНФОРМАЦИЯ
 -- ============================================================
 
-print("🔥 PRO + AUTO-SHOOT загружен!")
+print("🔥 PRO + WALLBANG загружен!")
 print("🔹 Shift — меню")
 print("🔹 G — ESP")
 print("🔹 H — Аимбот (с авто-стрельбой)")
-print("🎯 Аимбот включён по умолчанию — стреляет автоматически!")
+print("🔹 L — Wallbang (стрельба через стены)")
+print("🎯 Аимбот включён по умолчанию")
