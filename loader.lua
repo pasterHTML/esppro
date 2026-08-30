@@ -1,6 +1,6 @@
 -- ============================================================
--- 🔥 PRO ESP + AIMBOT + TRIGGERBOT
--- Версия: 8.0
+-- 🔥 PRO ESP + AIMBOT (С АВТО-СТРЕЛЬБОЙ)
+-- Версия: 8.1
 -- ============================================================
 
 -- 🔓 МЯГКИЙ БАЙПАС
@@ -32,13 +32,10 @@ local Camera = workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
 local AimbotEnabled = true
-local TriggerbotEnabled = false
 local ESPEnabled = false
 local MaxDistance = 300
 local ESPRadius = 300
-
 local ESPObjects = {}
-local isShooting = false
 
 -- ============================================================
 -- 🎯 ФУНКЦИИ ПРОВЕРКИ
@@ -59,50 +56,7 @@ local function isAlive(player)
 end
 
 -- ============================================================
--- 🎯 ФУНКЦИЯ ПОЛУЧЕНИЯ ЦЕЛИ ПОД КУРСОРОМ (ДЛЯ ТРИГГЕРБОТА)
--- ============================================================
-
-local function getTargetUnderCursor()
-    local target = Mouse.Target
-    if not target then return nil end
-    
-    local player = Players:GetPlayerFromCharacter(target.Parent)
-    if not player then
-        -- Проверяем, может быть цель это часть персонажа
-        local parent = target.Parent
-        while parent do
-            local plr = Players:GetPlayerFromCharacter(parent)
-            if plr then
-                player = plr
-                break
-            end
-            parent = parent.Parent
-        end
-    end
-    
-    if not player then return nil end
-    if player == LocalPlayer then return nil end
-    if not isAlive(player) then return nil end
-    if not isEnemy(player) then return nil end
-    
-    -- Проверка видимости (не за стеной)
-    local head = player.Character:FindFirstChild("Head")
-    if not head then return nil end
-    
-    local origin = Camera.CFrame.Position
-    local direction = (head.Position - origin).Unit * 500
-    local ray = Ray.new(origin, direction)
-    local hit, _ = workspace:FindPartOnRay(ray, LocalPlayer.Character, false, true)
-    
-    if hit and not hit:IsDescendantOf(player.Character) then
-        return nil  -- За стеной
-    end
-    
-    return player
-end
-
--- ============================================================
--- 🎯 ФУНКЦИЯ НАХОЖДЕНИЯ БЛИЖАЙШЕГО ВРАГА (ДЛЯ АИМБОТА)
+-- 🎯 ФУНКЦИЯ НАХОЖДЕНИЯ БЛИЖАЙШЕГО ВРАГА
 -- ============================================================
 
 local function getClosestEnemy()
@@ -133,38 +87,34 @@ local function getClosestEnemy()
 end
 
 -- ============================================================
--- 🎯 АИМБОТ
+-- 🔫 АИМБОТ + ВСТРОЕННЫЙ ТРИГГЕРБОТ (АВТО-СТРЕЛЬБА)
 -- ============================================================
+
+local lastShotTime = 0
+local shootCooldown = 0.08  -- Задержка между выстрелами
 
 RunService.RenderStepped:Connect(function()
-    if AimbotEnabled then
-        local target = getClosestEnemy()
-        if target and target.Character and target.Character:FindFirstChild("Head") then
-            if isAlive(target) then
-                Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
-            end
-        end
-    end
-end)
-
--- ============================================================
--- 🔫 ТРИГГЕРБОТ (АВТО-СТРЕЛЬБА)
--- ============================================================
-
-RunService.RenderStepped:Connect(function()
-    if not TriggerbotEnabled then return end
-    if not LocalPlayer.Character then return end
+    if not AimbotEnabled then return end
     
-    local target = getTargetUnderCursor()
-    if target then
-        -- Нажимаем ЛКМ
-        if not isShooting then
-            isShooting = true
-            Mouse.Button1Down:Fire()
-            task.wait(0.05)
-            Mouse.Button1Up:Fire()
-            isShooting = false
-        end
+    local target = getClosestEnemy()
+    if not target then return end
+    
+    local head = target.Character:FindFirstChild("Head")
+    if not head then return end
+    
+    -- Наводим камеру на цель
+    Camera.CFrame = CFrame.new(Camera.CFrame.Position, head.Position)
+    
+    -- ═══════════════════════════════════════════════════════════
+    -- 🔫 АВТО-СТРЕЛЬБА (ВСТРОЕННЫЙ ТРИГГЕРБОТ)
+    -- ═══════════════════════════════════════════════════════════
+    local currentTime = tick()
+    if currentTime - lastShotTime >= shootCooldown then
+        -- Стреляем
+        Mouse.Button1Down:Fire()
+        task.wait(0.02)
+        Mouse.Button1Up:Fire()
+        lastShotTime = currentTime
     end
 end)
 
@@ -194,7 +144,7 @@ local function toggleESP()
             local distance = (hrp.Position - Camera.CFrame.Position).Magnitude
             if distance > ESPRadius then continue end
 
-            -- Highlight
+            -- Highlight (красивая обводка)
             local highlight = Instance.new("Highlight")
             highlight.Parent = char
             highlight.FillColor = Color3.fromRGB(255, 50, 50)
@@ -204,7 +154,7 @@ local function toggleESP()
             highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
             table.insert(ESPObjects, highlight)
 
-            -- Billboard
+            -- Billboard с именем и здоровьем
             local head = char:FindFirstChild("Head")
             if head then
                 local billboard = Instance.new("BillboardGui")
@@ -245,15 +195,12 @@ local function rejoinServer()
 end
 
 -- ============================================================
--- 📊 GUI (НЕ ПРОПАДАЕТ ПОСЛЕ СМЕРТИ)
+-- 📊 GUI
 -- ============================================================
 
 local function createGUI()
-    -- Проверяем, существует ли уже GUI
     local existing = CoreGui:FindFirstChild("M")
-    if existing then
-        existing:Destroy()
-    end
+    if existing then existing:Destroy() end
     
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "M"
@@ -262,8 +209,8 @@ local function createGUI()
     ScreenGui.IgnoreGuiInset = true
 
     local MainFrame = Instance.new("Frame")
-    MainFrame.Size = UDim2.new(0, 300, 0, 320)  -- Чуть выше для новой кнопки
-    MainFrame.Position = UDim2.new(0.5, -150, 0.5, -160)
+    MainFrame.Size = UDim2.new(0, 300, 0, 280)
+    MainFrame.Position = UDim2.new(0.5, -150, 0.5, -140)
     MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     MainFrame.BackgroundTransparency = 0.15
     MainFrame.BorderSizePixel = 2
@@ -306,10 +253,10 @@ local function createGUI()
         button.BackgroundColor3 = state and Color3.fromRGB(0, 150, 50) or Color3.fromRGB(150, 50, 50)
     end
 
-    -- Aimbot
+    -- Aimbot (с авто-стрельбой)
     local AimbotButton = Instance.new("TextButton")
     AimbotButton.Size = UDim2.new(0, 250, 0, 40)
-    AimbotButton.Position = UDim2.new(0.5, -125, 0, 50)
+    AimbotButton.Position = UDim2.new(0.5, -125, 0, 55)
     AimbotButton.Name = "Aimbot"
     updateButton(AimbotButton, AimbotEnabled)
     AimbotButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -326,30 +273,10 @@ local function createGUI()
         updateButton(AimbotButton, AimbotEnabled)
     end)
 
-    -- Triggerbot (НОВАЯ КНОПКА)
-    local TriggerbotButton = Instance.new("TextButton")
-    TriggerbotButton.Size = UDim2.new(0, 250, 0, 40)
-    TriggerbotButton.Position = UDim2.new(0.5, -125, 0, 100)
-    TriggerbotButton.Name = "Triggerbot"
-    updateButton(TriggerbotButton, TriggerbotEnabled)
-    TriggerbotButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    TriggerbotButton.Font = Enum.Font.GothamBold
-    TriggerbotButton.BorderSizePixel = 0
-    TriggerbotButton.Parent = MainFrame
-
-    local trigCorner = Instance.new("UICorner")
-    trigCorner.Parent = TriggerbotButton
-    trigCorner.CornerRadius = UDim.new(0, 8)
-
-    TriggerbotButton.MouseButton1Click:Connect(function()
-        TriggerbotEnabled = not TriggerbotEnabled
-        updateButton(TriggerbotButton, TriggerbotEnabled)
-    end)
-
     -- ESP
     local ESPButton = Instance.new("TextButton")
     ESPButton.Size = UDim2.new(0, 250, 0, 40)
-    ESPButton.Position = UDim2.new(0.5, -125, 0, 150)
+    ESPButton.Position = UDim2.new(0.5, -125, 0, 105)
     ESPButton.Name = "ESP"
     updateButton(ESPButton, ESPEnabled)
     ESPButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -369,7 +296,7 @@ local function createGUI()
     -- Rejoin
     local RejoinButton = Instance.new("TextButton")
     RejoinButton.Size = UDim2.new(0, 250, 0, 40)
-    RejoinButton.Position = UDim2.new(0.5, -125, 0, 200)
+    RejoinButton.Position = UDim2.new(0.5, -125, 0, 155)
     RejoinButton.Text = "Rejoin"
     RejoinButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     RejoinButton.Font = Enum.Font.GothamBold
@@ -386,7 +313,7 @@ local function createGUI()
     -- Exit
     local ExitButton = Instance.new("TextButton")
     ExitButton.Size = UDim2.new(0, 250, 0, 40)
-    ExitButton.Position = UDim2.new(0.5, -125, 0, 250)
+    ExitButton.Position = UDim2.new(0.5, -125, 0, 205)
     ExitButton.Text = "Exit"
     ExitButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     ExitButton.Font = Enum.Font.GothamBold
@@ -406,7 +333,6 @@ local function createGUI()
         MainFrame.Visible = false
     end)
 
-    -- Бинды
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then return end
 
@@ -423,11 +349,6 @@ local function createGUI()
             AimbotEnabled = not AimbotEnabled
             updateButton(AimbotButton, AimbotEnabled)
         end
-
-        if input.KeyCode == Enum.KeyCode.T then  -- Новая клавиша для триггербота
-            TriggerbotEnabled = not TriggerbotEnabled
-            updateButton(TriggerbotButton, TriggerbotEnabled)
-        end
     end)
 
     return ScreenGui
@@ -439,7 +360,6 @@ end
 
 local guiInstance = createGUI()
 
--- Если GUI пропал, пересоздаём
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(0.5)
     if not CoreGui:FindFirstChild("M") then
@@ -462,9 +382,8 @@ end)
 -- 📌 ИНФОРМАЦИЯ
 -- ============================================================
 
-print("🔥 PRO + TRIGGERBOT загружен!")
+print("🔥 PRO + AUTO-SHOOT загружен!")
 print("🔹 Shift — меню")
 print("🔹 G — ESP")
-print("🔹 H — Аимбот")
-print("🔹 T — Триггербот (авто-стрельба по врагу)")
-print("🎯 Аимбот включён по умолчанию")
+print("🔹 H — Аимбот (с авто-стрельбой)")
+print("🎯 Аимбот включён по умолчанию — стреляет автоматически!")
