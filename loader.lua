@@ -1,10 +1,9 @@
 -- ============================================================
--- 🔥 PRO ESP + AIMBOT + WALLBANG
--- Версия: 10.1
--- Бинды: Shift (меню) | G (ESP) | H (Аимбот) | L (Wallbang)
+-- 🔥 PRO ESP + AIMBOT (С ПЕРЕХВАТОМ ВЫСТРЕЛА)
+-- Версия: 11.0
 -- ============================================================
 
--- 🔓 МЯГКИЙ БАЙПАС
+-- 🔓 БАЙПАС
 for i, v in next, getgc(true) do
     if typeof(v) == 'function' and getfenv(v).script and getfenv(v).script.Parent == nil then
         if not isourclosure(v) then
@@ -26,6 +25,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TeleportService = game:GetService("TeleportService")
 
 local LocalPlayer = Players.LocalPlayer
@@ -40,7 +40,70 @@ local ESPRadius = 300
 local ESPObjects = {}
 
 -- ============================================================
--- 🔥 WALLBANG (СТРЕЛЬБА ЧЕРЕЗ СТЕНЫ)
+-- 🔍 ПОИСК REMOTEEVENT ДЛЯ ВЫСТРЕЛА
+-- ============================================================
+
+local ShootRemote = nil
+local WeaponScript = nil
+
+-- Ищем RemoteEvent для выстрела
+local function findShootRemote()
+    -- Ищем в ReplicatedStorage
+    for _, child in pairs(ReplicatedStorage:GetDescendants()) do
+        if child:IsA("RemoteEvent") and (child.Name:lower():find("shoot") or child.Name:lower():find("fire") or child.Name:lower():find("gun")) then
+            ShootRemote = child
+            print("🔫 Найден RemoteEvent для выстрела: " .. child.Name)
+            return child
+        end
+    end
+    
+    -- Ищем в Players
+    for _, child in pairs(LocalPlayer.PlayerGui:GetDescendants()) do
+        if child:IsA("RemoteEvent") and (child.Name:lower():find("shoot") or child.Name:lower():find("fire")) then
+            ShootRemote = child
+            print("🔫 Найден RemoteEvent в PlayerGui: " .. child.Name)
+            return child
+        end
+    end
+    
+    return nil
+end
+
+-- Ищем скрипт оружия
+local function findWeaponScript()
+    if LocalPlayer.Character then
+        for _, child in pairs(LocalPlayer.Character:GetChildren()) do
+            if child:IsA("Tool") or child:IsA("Part") then
+                local script = child:FindFirstChild("Script")
+                if script and script:IsA("Script") then
+                    WeaponScript = script
+                    print("🔫 Найден скрипт оружия: " .. script.Name)
+                    return script
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- Подключаемся к оружию
+local function connectWeapon()
+    findWeaponScript()
+    findShootRemote()
+end
+
+-- Следим за появлением оружия
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    WeaponScript = nil
+    ShootRemote = nil
+    connectWeapon()
+end)
+
+connectWeapon()
+
+-- ============================================================
+-- 🔥 WALLBANG
 -- ============================================================
 
 local oldFindPartOnRay = workspace.FindPartOnRay
@@ -103,7 +166,6 @@ local function getClosestEnemy()
 
         local distance = (head.Position - Camera.CFrame.Position).Magnitude
 
-        -- Если Wallbang выключен — проверяем стены
         if not WallbangEnabled then
             local ray = Ray.new(Camera.CFrame.Position, (head.Position - Camera.CFrame.Position).Unit * distance)
             local hit, _ = workspace:FindPartOnRay(ray, LocalPlayer.Character, false, true)
@@ -122,11 +184,11 @@ local function getClosestEnemy()
 end
 
 -- ============================================================
--- 🔫 АИМБОТ + АВТО-СТРЕЛЬБА
+-- 🔫 АИМБОТ + СТРЕЛЬБА ЧЕРЕЗ REMOTEEVENT
 -- ============================================================
 
 local lastShotTime = 0
-local shootCooldown = 0.08
+local shootCooldown = 0.12
 
 RunService.RenderStepped:Connect(function()
     if not AimbotEnabled then return end
@@ -138,15 +200,48 @@ RunService.RenderStepped:Connect(function()
     local head = target.Character:FindFirstChild("Head")
     if not head then return end
     
+    -- Наводим камеру
     Camera.CFrame = CFrame.new(Camera.CFrame.Position, head.Position)
     
-    -- Авто-стрельба
+    -- ═══════════════════════════════════════════════
+    -- 🔫 СТРЕЛЬБА ЧЕРЕЗ REMOTEEVENT
+    -- ═══════════════════════════════════════════════
     local currentTime = tick()
     if currentTime - lastShotTime >= shootCooldown then
-        Mouse.Button1Down:Fire()
-        task.wait(0.02)
-        Mouse.Button1Up:Fire()
-        lastShotTime = currentTime
+        
+        -- Способ 1: Если нашли RemoteEvent — вызываем его
+        if ShootRemote then
+            pcall(function()
+                -- Пытаемся вызвать с разными аргументами
+                ShootRemote:FireServer(head.Position)
+                ShootRemote:FireServer(head.Position, target.Character)
+                ShootRemote:FireServer(target.Character, head.Position)
+                ShootRemote:FireServer(head)
+            end)
+            lastShotTime = currentTime
+            
+        -- Способ 2: Если есть скрипт оружия — ищем в нём функцию выстрела
+        elseif WeaponScript then
+            pcall(function()
+                -- Ищем функцию Shoot в окружении скрипта
+                local env = getfenv(WeaponScript)
+                if env and env.Shoot then
+                    env.Shoot()
+                elseif env and env.Fire then
+                    env.Fire()
+                elseif env and env.Activate then
+                    env.Activate()
+                end
+            end)
+            lastShotTime = currentTime
+            
+        -- Способ 3: Стандартный клик мыши (если ничего не помогло)
+        else
+            Mouse.Button1Down:Fire()
+            task.wait(0.02)
+            Mouse.Button1Up:Fire()
+            lastShotTime = currentTime
+        end
     end
 end)
 
@@ -176,7 +271,6 @@ local function toggleESP()
             local distance = (hrp.Position - Camera.CFrame.Position).Magnitude
             if distance > ESPRadius then continue end
 
-            -- Highlight (красивая обводка)
             local highlight = Instance.new("Highlight")
             highlight.Parent = char
             highlight.FillColor = Color3.fromRGB(255, 50, 50)
@@ -186,7 +280,6 @@ local function toggleESP()
             highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
             table.insert(ESPObjects, highlight)
 
-            -- Billboard с именем и здоровьем
             local head = char:FindFirstChild("Head")
             if head then
                 local billboard = Instance.new("BillboardGui")
@@ -404,6 +497,9 @@ LocalPlayer.CharacterAdded:Connect(function()
     if not CoreGui:FindFirstChild("M") then
         guiInstance = createGUI()
     end
+    WeaponScript = nil
+    ShootRemote = nil
+    connectWeapon()
 end)
 
 -- ============================================================
@@ -424,24 +520,20 @@ end)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
 
-    -- Правый Shift — меню
     if input.KeyCode == Enum.KeyCode.RightShift then
         MainFrame.Visible = not MainFrame.Visible
     end
 
-    -- G — ESP
     if input.KeyCode == Enum.KeyCode.G then
         toggleESP()
         updateButton(ESPButton, ESPEnabled)
     end
 
-    -- H — Аимбот
     if input.KeyCode == Enum.KeyCode.H then
         AimbotEnabled = not AimbotEnabled
         updateButton(AimbotButton, AimbotEnabled)
     end
 
-    -- L — Wallbang (стрельба через стены)
     if input.KeyCode == Enum.KeyCode.L then
         WallbangEnabled = not WallbangEnabled
         updateButton(WallbangButton, WallbangEnabled)
@@ -449,7 +541,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
             enableWallbang()
             game.StarterGui:SetCore("SendNotification", {
                 Title = "Wallbang",
-                Text = "Включён! Стреляй сквозь стены",
+                Text = "Включён!",
                 Duration = 1.5
             })
         else
@@ -467,9 +559,9 @@ end)
 -- 📌 ИНФОРМАЦИЯ
 -- ============================================================
 
-print("🔥 PRO + WALLBANG загружен!")
+print("🔥 PRO + AIMBOT загружен!")
 print("🔹 Shift — меню")
 print("🔹 G — ESP")
 print("🔹 H — Аимбот (с авто-стрельбой)")
-print("🔹 L — Wallbang (стрельба через стены)")
-print("🎯 Аимбот включён по умолчанию")
+print("🔹 L — Wallbang")
+print("🔫 Попытка стрельбы через RemoteEvent")
