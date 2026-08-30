@@ -1,6 +1,6 @@
 -- ============================================================
--- 🔥 PRO ESP + AIMBOT (С ОРИГИНАЛЬНЫМ МЕХАНИЗМОМ СТРЕЛЬБЫ)
--- Версия: 16.0
+-- 🔥 ПОЛНЫЙ СКРИПТ С АВТО-СТРЕЛЬБОЙ
+-- Версия: 20.0 (ФИНАЛЬНАЯ)
 -- ============================================================
 
 -- 🔓 БАЙПАС
@@ -37,14 +37,21 @@ local MaxDistance = 300
 local ESPRadius = 300
 local ESPObjects = {}
 
--- ============================================================
--- 🔫 ОРИГИНАЛЬНЫЙ КОД ВЫСТРЕЛА (КАК В ПИСТОЛЕТЕ)
--- ============================================================
-
+local BlasterController = nil
 local WeaponController = nil
-local CurrentWeapon = nil
+local WeaponConnected = false
 
--- Функция поиска Desert Eagle в руках
+-- ============================================================
+-- 🔫 ЗАГРУЗКА BLASTERCONTROLLER И ПОДКЛЮЧЕНИЕ К ОРУЖИЮ
+-- ============================================================
+
+-- Загружаем BlasterController
+pcall(function()
+    BlasterController = require(ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Scripts"):WaitForChild("BlasterController"))
+    print("✅ BlasterController загружен!")
+end)
+
+-- Функция поиска Desert Eagle
 local function findDesertEagle()
     if not LocalPlayer.Character then return nil end
     
@@ -54,7 +61,6 @@ local function findDesertEagle()
         end
     end
     
-    -- Ищем в Backpack
     for _, child in pairs(LocalPlayer.Backpack:GetChildren()) do
         if child.Name == "Desert Eagle" then
             return child
@@ -64,42 +70,36 @@ local function findDesertEagle()
     return nil
 end
 
--- Функция создания контроллера (как в оригинальном скрипте)
-local function createWeaponController()
+-- Создаём контроллер для Desert Eagle
+local function connectWeapon()
+    if WeaponConnected then return end
+    if not BlasterController then return end
+    
     local weapon = findDesertEagle()
     if not weapon then
         print("⚠️ Desert Eagle не найден!")
-        return false
+        return
     end
     
-    CurrentWeapon = weapon
-    
-    -- ТОЧНО ТАК ЖЕ, КАК В ОРИГИНАЛЬНОМ СКРИПТЕ
-    pcall(function()
-        local BlasterController = require(ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Scripts"):WaitForChild("BlasterController"))
-        if BlasterController then
-            WeaponController = BlasterController.new(weapon)
-            print("✅ Desert Eagle подключён! Контроллер создан.")
-            return true
-        end
-    end)
-    
-    return false
+    -- ═══════════════════════════════════════════════
+    -- СОЗДАЁМ КОНТРОЛЛЕР (КАК В ОРИГИНАЛЕ)
+    -- ═══════════════════════════════════════════════
+    WeaponController = BlasterController.new(weapon)
+    WeaponConnected = true
+    print("✅ Desert Eagle подключён!")
 end
 
--- ============================================================
--- 🔫 ФУНКЦИЯ ВЫСТРЕЛА
--- ============================================================
+-- Следим за появлением Desert Eagle
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    WeaponConnected = false
+    WeaponController = nil
+    connectWeapon()
+end)
 
-local function shoot()
-    if WeaponController and WeaponController.Shoot then
-        pcall(function()
-            WeaponController:Shoot()
-        end)
-        return true
-    end
-    return false
-end
+-- Пробуем подключиться сразу
+task.wait(1)
+connectWeapon()
 
 -- ============================================================
 -- 🎯 ФУНКЦИИ ПРОВЕРКИ
@@ -148,40 +148,19 @@ local function getClosestEnemy()
 end
 
 -- ============================================================
--- 🔫 АИМБОТ + АВТО-СТРЕЛЬБА
+-- 🔫 АИМБОТ + АВТО-СТРЕЛЬБА ЧЕРЕЗ BLASTERCONTROLLER
 -- ============================================================
 
 local lastShotTime = 0
 local shootCooldown = 0.08
 
--- Подключаемся к оружию
-createWeaponController()
-
--- Если не подключились сразу — пробуем снова
-task.spawn(function()
-    while true do
-        task.wait(2)
-        if not WeaponController then
-            createWeaponController()
-        end
-    end
-end)
-
--- Следим за появлением оружия после респавна
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(1)
-    WeaponController = nil
-    CurrentWeapon = nil
-    createWeaponController()
-end)
-
 RunService.RenderStepped:Connect(function()
     if not AimbotEnabled then return end
     if not LocalPlayer.Character then return end
     
-    -- Если контроллер потерялся — ищем заново
-    if not WeaponController then
-        createWeaponController()
+    -- Если контроллер потерялся — подключаем заново
+    if not WeaponConnected then
+        connectWeapon()
     end
     
     local target = getClosestEnemy()
@@ -193,11 +172,16 @@ RunService.RenderStepped:Connect(function()
     -- Наводим камеру
     Camera.CFrame = CFrame.new(Camera.CFrame.Position, head.Position)
     
-    -- 🔫 АВТО-СТРЕЛЬБА
+    -- ═══════════════════════════════════════════════
+    -- 🔫 АВТО-СТРЕЛЬБА ЧЕРЕЗ BLASTERCONTROLLER
+    -- ═══════════════════════════════════════════════
     local currentTime = tick()
     if currentTime - lastShotTime >= shootCooldown then
-        if shoot() then
-            lastShotTime = currentTime
+        if WeaponController and WeaponController.shoot then
+            pcall(function()
+                WeaponController:shoot()
+                lastShotTime = currentTime
+            end)
         end
     end
 end)
@@ -429,9 +413,9 @@ LocalPlayer.CharacterAdded:Connect(function()
     if not CoreGui:FindFirstChild("M") then
         guiInstance = createGUI()
     end
+    WeaponConnected = false
     WeaponController = nil
-    CurrentWeapon = nil
-    createWeaponController()
+    connectWeapon()
 end)
 
 -- ============================================================
@@ -471,8 +455,8 @@ end)
 -- 📌 ИНФОРМАЦИЯ
 -- ============================================================
 
-print("🔥 PRO + DESERT EAGLE загружен!")
+print("🔥 PRO + BLASTERCONTROLLER загружен!")
 print("🔹 Shift — меню")
 print("🔹 G — ESP")
 print("🔹 H — Аимбот (с авто-стрельбой)")
-print("🔫 Desert Eagle подключён: " .. tostring(WeaponController ~= nil))
+print("🔫 Desert Eagle подключён: " .. tostring(WeaponConnected))
