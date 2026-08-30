@@ -1,10 +1,6 @@
 -- ============================================================
--- 🔥 PRO ESP + AIMBOT (ИСПРАВЛЕННЫЙ)
--- Версия: 4.0 (на основе рабочего скрипта)
--- ============================================================
-
--- ============================================================
--- ⚙️ ПЕРЕМЕННЫЕ
+-- 🔥 PRO ESP + AIMBOT (ФИНАЛЬНЫЙ)
+-- Версия: 5.0
 -- ============================================================
 
 local Players = game:GetService("Players")
@@ -16,9 +12,11 @@ local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
+-- ===== ПЕРЕМЕННЫЕ (Аимбот включён по умолчанию) =====
 local AimbotEnabled = true
 local ESPEnabled = false
-local MaxDistance = 300
+local MaxDistance = 300      -- Макс дистанция для аимбота
+local ESPRadius = 150        -- Радиус видимости ESP
 
 local ESPObjects = {}
 local ESPLines = {}
@@ -35,7 +33,7 @@ local function isEnemy(player)
 end
 
 -- ============================================================
--- 🎯 ФУНКЦИЯ НАХОЖДЕНИЯ БЛИЖАЙШЕГО ВРАГА (Ray.new)
+-- 🎯 ФУНКЦИЯ НАХОЖДЕНИЯ БЛИЖАЙШЕГО ВРАГА
 -- ============================================================
 
 local function getClosestEnemy()
@@ -47,7 +45,6 @@ local function getClosestEnemy()
             local head = player.Character.Head
             local distance = (head.Position - Camera.CFrame.Position).Magnitude
 
-            -- Используем Ray.new() как в рабочем скрипте
             local ray = Ray.new(Camera.CFrame.Position, (head.Position - Camera.CFrame.Position).Unit * distance)
             local hit, _ = workspace:FindPartOnRay(ray, LocalPlayer.Character, false, true)
 
@@ -62,19 +59,17 @@ local function getClosestEnemy()
 end
 
 -- ============================================================
--- 🟢 ESP (из рабочего скрипта, но с исправлениями)
+-- 🟢 ESP (ТОЛЬКО В РАДИУСЕ 150 СТУДИЙ)
 -- ============================================================
 
 local function toggleESP()
     ESPEnabled = not ESPEnabled
 
-    -- Удаляем старые ESP
     for _, v in pairs(ESPObjects) do
         if v then pcall(function() v:Destroy() end) end
     end
     ESPObjects = {}
 
-    -- Удаляем старые линии
     for _, v in pairs(ESPLines) do
         if v then pcall(function() v:Destroy() end) end
     end
@@ -84,8 +79,14 @@ local function toggleESP()
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= LocalPlayer and player.Character and isEnemy(player) then
                 local char = player.Character
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if not hrp then continue end
 
-                -- Обводка тела (BoxHandleAdornment)
+                -- Проверяем расстояние до игрока
+                local distance = (hrp.Position - Camera.CFrame.Position).Magnitude
+                if distance > ESPRadius then continue end  -- Не показываем дальше 150 студий
+
+                -- Обводка тела
                 local box = Instance.new("BoxHandleAdornment")
                 box.Size = char:GetExtentsSize()
                 box.Adornee = char
@@ -96,7 +97,7 @@ local function toggleESP()
                 box.Parent = char
                 table.insert(ESPObjects, box)
 
-                -- Highlight (подсветка частей тела)
+                -- Подсветка частей тела
                 for _, part in ipairs(char:GetChildren()) do
                     if part:IsA("BasePart") then
                         local highlight = Instance.new("Highlight")
@@ -110,21 +111,29 @@ local function toggleESP()
                     end
                 end
 
-                -- Линия к голове (исправлено)
+                -- Линия к голове
                 local line = Drawing.new("Line")
                 line.Color = Color3.new(1, 0, 0)
                 line.Thickness = 2
                 line.Transparency = 1
                 line.Visible = true
-
                 table.insert(ESPLines, line)
 
-                -- Обновление линии
                 local conn
                 conn = RunService.RenderStepped:Connect(function()
                     if not ESPEnabled or not player.Character or not player.Character:FindFirstChild("Head") then
                         line.Visible = false
                         return
+                    end
+
+                    -- Проверяем расстояние каждый кадр
+                    local hrp2 = player.Character:FindFirstChild("HumanoidRootPart")
+                    if hrp2 then
+                        local dist = (hrp2.Position - Camera.CFrame.Position).Magnitude
+                        if dist > ESPRadius then
+                            line.Visible = false
+                            return
+                        end
                     end
 
                     local headPos = Camera:WorldToViewportPoint(player.Character.Head.Position)
@@ -157,12 +166,11 @@ end)
 -- ============================================================
 
 local function rejoinServer()
-    local placeId = game.PlaceId
-    TeleportService:Teleport(placeId, LocalPlayer, {})
+    TeleportService:Teleport(game.PlaceId, LocalPlayer, {})
 end
 
 -- ============================================================
--- 📊 GUI (КОРЕГУИ - НЕ ПРОПАДАЕТ)
+-- 📊 GUI
 -- ============================================================
 
 local ScreenGui = Instance.new("ScreenGui")
@@ -170,7 +178,6 @@ ScreenGui.Name = "ProESP_GUI"
 ScreenGui.Parent = CoreGui
 ScreenGui.ResetOnSpawn = false
 
--- ===== ГЛАВНОЕ МЕНЮ =====
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0, 300, 0, 280)
 MainFrame.Position = UDim2.new(0.5, -150, 0.5, -140)
@@ -186,7 +193,6 @@ local corner = Instance.new("UICorner")
 corner.Parent = MainFrame
 corner.CornerRadius = UDim.new(0, 12)
 
--- ===== ЗАГОЛОВОК =====
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 40)
 Title.Position = UDim2.new(0, 0, 0, 5)
@@ -197,7 +203,6 @@ Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.Font = Enum.Font.GothamBold
 Title.Parent = MainFrame
 
--- ===== КНОПКА ЗАКРЫТИЯ =====
 local CloseButton = Instance.new("TextButton")
 CloseButton.Size = UDim2.new(0, 30, 0, 30)
 CloseButton.Position = UDim2.new(1, -35, 0, 5)
@@ -213,13 +218,12 @@ local closeCorner = Instance.new("UICorner")
 closeCorner.Parent = CloseButton
 closeCorner.CornerRadius = UDim.new(0, 6)
 
--- ===== ФУНКЦИЯ ОБНОВЛЕНИЯ КНОПОК =====
 local function updateButton(button, state)
     button.Text = state and button.Name .. ": ON" or button.Name .. ": OFF"
     button.BackgroundColor3 = state and Color3.fromRGB(0, 150, 50) or Color3.fromRGB(150, 50, 50)
 end
 
--- ===== КНОПКА Aimbot =====
+-- Кнопка Aimbot
 local AimbotButton = Instance.new("TextButton")
 AimbotButton.Size = UDim2.new(0, 250, 0, 40)
 AimbotButton.Position = UDim2.new(0.5, -125, 0, 55)
@@ -239,7 +243,7 @@ AimbotButton.MouseButton1Click:Connect(function()
     updateButton(AimbotButton, AimbotEnabled)
 end)
 
--- ===== КНОПКА ESP =====
+-- Кнопка ESP
 local ESPButton = Instance.new("TextButton")
 ESPButton.Size = UDim2.new(0, 250, 0, 40)
 ESPButton.Position = UDim2.new(0.5, -125, 0, 105)
@@ -259,7 +263,7 @@ ESPButton.MouseButton1Click:Connect(function()
     updateButton(ESPButton, ESPEnabled)
 end)
 
--- ===== КНОПКА REJOIN =====
+-- Кнопка Rejoin
 local RejoinButton = Instance.new("TextButton")
 RejoinButton.Size = UDim2.new(0, 250, 0, 40)
 RejoinButton.Position = UDim2.new(0.5, -125, 0, 155)
@@ -278,35 +282,47 @@ RejoinButton.MouseButton1Click:Connect(function()
     rejoinServer()
 end)
 
--- ===== КНОПКА CLEAR REPORTS =====
-local ClearButton = Instance.new("TextButton")
-ClearButton.Size = UDim2.new(0, 250, 0, 40)
-ClearButton.Position = UDim2.new(0.5, -125, 0, 205)
-ClearButton.Text = "Clear Reports (Exit)"
-ClearButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-ClearButton.Font = Enum.Font.GothamBold
-ClearButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-ClearButton.BorderSizePixel = 0
-ClearButton.Parent = MainFrame
+-- Кнопка Exit Game (было Clear Reports)
+local ExitButton = Instance.new("TextButton")
+ExitButton.Size = UDim2.new(0, 250, 0, 40)
+ExitButton.Position = UDim2.new(0.5, -125, 0, 205)
+ExitButton.Text = "Exit Game"
+ExitButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ExitButton.Font = Enum.Font.GothamBold
+ExitButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+ExitButton.BorderSizePixel = 0
+ExitButton.Parent = MainFrame
 
-local clearCorner = Instance.new("UICorner")
-clearCorner.Parent = ClearButton
-clearCorner.CornerRadius = UDim.new(0, 8)
+local exitCorner = Instance.new("UICorner")
+exitCorner.Parent = ExitButton
+exitCorner.CornerRadius = UDim.new(0, 8)
 
-ClearButton.MouseButton1Click:Connect(function()
+ExitButton.MouseButton1Click:Connect(function()
     game:Shutdown()
-end)
+})
 
--- ===== ЗАКРЫТИЕ GUI =====
-CloseButton.MouseButton1Click:Connect(function()
-    MainFrame.Visible = false
-end)
+-- ============================================================
+-- ⌨️ БИНДЫ
+-- ============================================================
 
--- ===== ОТКРЫТИЕ GUI (Правый Shift) =====
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
+
+    -- Правый Shift — меню
     if input.KeyCode == Enum.KeyCode.RightShift then
         MainFrame.Visible = not MainFrame.Visible
+    end
+
+    -- G — ESP
+    if input.KeyCode == Enum.KeyCode.G then
+        toggleESP()
+        updateButton(ESPButton, ESPEnabled)
+    end
+
+    -- H — Аимбот
+    if input.KeyCode == Enum.KeyCode.H then
+        AimbotEnabled = not AimbotEnabled
+        updateButton(AimbotButton, AimbotEnabled)
     end
 end)
 
@@ -327,4 +343,6 @@ end)
 
 print("🔥 PRO ESP + AIMBOT загружен!")
 print("🔹 Правый Shift — показать/скрыть меню")
-print("🔹 Кнопки в меню — управление функциями")
+print("🔹 G — включить/выключить ESP")
+print("🔹 H — включить/выключить Аимбот")
+print("🎯 Aimbot включён по умолчанию!")
