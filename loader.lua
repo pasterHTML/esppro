@@ -1,19 +1,14 @@
 -- ============================================================
--- 🔥 PRO ESP + AIMBOT (АНТИ-ДЕТЕКТ)
--- Версия: 6.0
+-- 🔥 PRO ESP + AIMBOT (ФИНАЛЬНЫЙ ИСПРАВЛЕННЫЙ)
+-- Версия: 7.0
 -- ============================================================
 
--- ============================================================
--- 🔓 МЯГКИЙ БАЙПАС (НЕ АГРЕССИВНЫЙ)
--- ============================================================
-
--- Отключаем только самые агрессивные функции античита
--- Не трогаем всё подряд, чтобы не сломать игру
+-- 🔓 МЯГКИЙ БАЙПАС
 for i, v in next, getgc(true) do
     if typeof(v) == 'function' and getfenv(v).script and getfenv(v).script.Parent == nil then
         if not isourclosure(v) then
             local source = debug.info(v, 's')
-            if source and source:find('Anti') or source and source:find('Detect') then
+            if source and (source:find('Anti') or source:find('Detect')) then
                 pcall(function()
                     hookfunction(v, function() return end)
                 end)
@@ -23,307 +18,325 @@ for i, v in next, getgc(true) do
 end
 
 -- ============================================================
--- ⚙️ ОСНОВНОЙ СКРИПТ (ОБФУСЦИРОВАННЫЙ ВИД)
+-- ⚙️ ПЕРЕМЕННЫЕ
 -- ============================================================
 
-local a = game:GetService("Players")
-local b = game:GetService("RunService")
-local c = game:GetService("UserInputService")
-local d = game:GetService("CoreGui")
-local e = game:GetService("TeleportService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local TeleportService = game:GetService("TeleportService")
 
-local f = a.LocalPlayer
-local g = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 
-local h = true
-local i = false
-local j = 300
-local k = 150
+local AimbotEnabled = true      -- Включён по умолчанию
+local ESPEnabled = false
+local MaxDistance = 300
+local ESPRadius = 300            -- Увеличено в 2 раза (было 150)
 
-local l = {}
-local m = {}
+local ESPObjects = {}
 
 -- ============================================================
 -- 🎯 ФУНКЦИЯ ПРОВЕРКИ ВРАГА
 -- ============================================================
 
-local function n(o)
-    if o.Team and f.Team then
-        return o.Team ~= f.Team
+local function isEnemy(player)
+    if player.Team and LocalPlayer.Team then
+        return player.Team ~= LocalPlayer.Team
     end
     return true
 end
 
 -- ============================================================
--- 🎯 ФУНКЦИЯ НАХОЖДЕНИЯ БЛИЖАЙШЕГО ВРАГА (ОБХОД)
+-- 🎯 ФУНКЦИЯ ПРОВЕРКИ - ЖИВОЙ ЛИ ИГРОК
 -- ============================================================
 
-local function p()
-    local q = nil
-    local r = j
-
-    for _, o in ipairs(a:GetPlayers()) do
-        if o ~= f and o.Character and o.Character:FindFirstChild("Head") and n(o) then
-            local s = o.Character.Head
-            local t = (s.Position - g.CFrame.Position).Magnitude
-
-            local u = Ray.new(g.CFrame.Position, (s.Position - g.CFrame.Position).Unit * t)
-            local v, _ = workspace:FindPartOnRay(u, f.Character, false, true)
-
-            if t <= r and (not v or v:IsDescendantOf(o.Character)) then
-                q = o
-                r = t
-            end
-        end
-    end
-
-    return q
+local function isAlive(player)
+    if not player or not player.Character then return false end
+    local humanoid = player.Character:FindFirstChild("Humanoid")
+    if not humanoid then return false end
+    return humanoid.Health > 0
 end
 
 -- ============================================================
--- 🟢 ESP
+-- 🎯 ФУНКЦИЯ НАХОЖДЕНИЯ БЛИЖАЙШЕГО ЖИВОГО ВРАГА
 -- ============================================================
 
-local function w()
-    i = not i
+local function getClosestEnemy()
+    local closestEnemy = nil
+    local shortestDistance = MaxDistance
 
-    for _, v in pairs(l) do
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+        if not player.Character then continue end
+        if not isAlive(player) then continue end  -- Игнорируем трупы
+        if not isEnemy(player) then continue end
+        
+        local head = player.Character:FindFirstChild("Head")
+        if not head then continue end
+
+        local distance = (head.Position - Camera.CFrame.Position).Magnitude
+
+        -- Проверка видимости (не за стеной)
+        local ray = Ray.new(Camera.CFrame.Position, (head.Position - Camera.CFrame.Position).Unit * distance)
+        local hit, _ = workspace:FindPartOnRay(ray, LocalPlayer.Character, false, true)
+
+        if distance <= shortestDistance and (not hit or hit:IsDescendantOf(player.Character)) then
+            closestEnemy = player
+            shortestDistance = distance
+        end
+    end
+
+    return closestEnemy
+end
+
+-- ============================================================
+-- 🟢 ESP (ТОЛЬКО ОБВОДКА, БЕЗ КВАДРАТА)
+-- ============================================================
+
+local function toggleESP()
+    ESPEnabled = not ESPEnabled
+
+    -- Удаляем старые ESP
+    for _, v in pairs(ESPObjects) do
         if v then pcall(function() v:Destroy() end) end
     end
-    l = {}
+    ESPObjects = {}
 
-    for _, v in pairs(m) do
-        if v then pcall(function() v:Destroy() end) end
-    end
-    m = {}
+    if ESPEnabled then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player == LocalPlayer then continue end
+            if not player.Character then continue end
+            if not isAlive(player) then continue end
+            if not isEnemy(player) then continue end
 
-    if i then
-        for _, o in ipairs(a:GetPlayers()) do
-            if o ~= f and o.Character and n(o) then
-                local x = o.Character
-                local y = x:FindFirstChild("HumanoidRootPart")
-                if not y then continue end
+            local char = player.Character
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if not hrp then continue end
 
-                local t = (y.Position - g.CFrame.Position).Magnitude
-                if t > k then continue end
+            -- Проверяем расстояние
+            local distance = (hrp.Position - Camera.CFrame.Position).Magnitude
+            if distance > ESPRadius then continue end
 
-                local z = Instance.new("BoxHandleAdornment")
-                z.Size = x:GetExtentsSize()
-                z.Adornee = x
-                z.AlwaysOnTop = true
-                z.ZIndex = 10
-                z.Color3 = Color3.new(1, 0, 0)
-                z.Transparency = 0.5
-                z.Parent = x
-                table.insert(l, z)
+            -- Только Highlight (красивая обводка), без квадрата!
+            local highlight = Instance.new("Highlight")
+            highlight.Parent = char
+            highlight.FillColor = Color3.fromRGB(255, 50, 50)
+            highlight.FillTransparency = 0.6
+            highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+            highlight.OutlineTransparency = 0.1
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            table.insert(ESPObjects, highlight)
 
-                for _, part in ipairs(x:GetChildren()) do
-                    if part:IsA("BasePart") then
-                        local A = Instance.new("Highlight")
-                        A.Parent = part
-                        A.Adornee = part
-                        A.FillColor = Color3.fromRGB(255, 0, 0)
-                        A.FillTransparency = 0.5
-                        A.OutlineColor = Color3.fromRGB(255, 255, 255)
-                        A.OutlineTransparency = 0
-                        table.insert(l, A)
-                    end
-                end
+            -- Billboard с именем и здоровьем
+            local head = char:FindFirstChild("Head")
+            if head then
+                local billboard = Instance.new("BillboardGui")
+                billboard.Parent = head
+                billboard.Adornee = head
+                billboard.Size = UDim2.new(0, 150, 0, 40)
+                billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+                billboard.AlwaysOnTop = true
+                billboard.MaxDistance = ESPRadius
 
-                -- Линия к голове (без Drawing, чтобы не детектить)
-                local B = Instance.new("BillboardGui")
-                B.Parent = x.Head
-                B.Adornee = x.Head
-                B.Size = UDim2.new(0, 2, 0, 2)
-                B.AlwaysOnTop = true
-                B.StudsOffset = Vector3.new(0, 0, 0)
+                local nameLabel = Instance.new("TextLabel")
+                nameLabel.Parent = billboard
+                nameLabel.Size = UDim2.new(1, 0, 1, 0)
+                nameLabel.BackgroundTransparency = 1
                 
-                local C = Instance.new("Frame")
-                C.Parent = B
-                C.Size = UDim2.new(1, 0, 1, 0)
-                C.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-                C.BackgroundTransparency = 0
-                C.BorderSizePixel = 0
-                table.insert(l, B)
+                local humanoid = char:FindFirstChild("Humanoid")
+                local health = humanoid and math.floor(humanoid.Health) or 0
+                nameLabel.Text = player.Name .. " [" .. health .. " HP]"
+                nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+                nameLabel.TextSize = 16
+                nameLabel.TextScaled = true
+                nameLabel.Font = Enum.Font.GothamBold
+                nameLabel.TextStrokeTransparency = 0.2
+                nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+
+                table.insert(ESPObjects, billboard)
             end
         end
     end
 end
 
 -- ============================================================
--- 🎯 АИМБОТ
+-- 🎯 АИМБОТ (ТОЛЬКО НА ЖИВЫХ)
 -- ============================================================
 
-b.RenderStepped:Connect(function()
-    if h then
-        local o = p()
-        if o and o.Character and o.Character:FindFirstChild("Head") then
-            g.CFrame = CFrame.new(g.CFrame.Position, o.Character.Head.Position)
+RunService.RenderStepped:Connect(function()
+    if AimbotEnabled then
+        local target = getClosestEnemy()
+        if target and target.Character and target.Character:FindFirstChild("Head") then
+            if isAlive(target) then  -- Двойная проверка
+                Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
+            end
         end
     end
 end)
 
 -- ============================================================
--- 🔄 ПЕРЕЗАХОД
+-- 🔄 ПЕРЕЗАХОД НА СЕРВЕР
 -- ============================================================
 
-local function D()
-    e:Teleport(game.PlaceId, f, {})
+local function rejoinServer()
+    TeleportService:Teleport(game.PlaceId, LocalPlayer, {})
 end
 
 -- ============================================================
 -- 📊 GUI
 -- ============================================================
 
-local E = Instance.new("ScreenGui")
-E.Name = "M"
-E.Parent = d
-E.ResetOnSpawn = false
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "M"
+ScreenGui.Parent = CoreGui
+ScreenGui.ResetOnSpawn = false
 
-local F = Instance.new("Frame")
-F.Size = UDim2.new(0, 300, 0, 280)
-F.Position = UDim2.new(0.5, -150, 0.5, -140)
-F.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-F.BackgroundTransparency = 0.15
-F.BorderSizePixel = 2
-F.BorderColor3 = Color3.fromRGB(255, 0, 0)
-F.Active = true
-F.Draggable = true
-F.Parent = E
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 300, 0, 280)
+MainFrame.Position = UDim2.new(0.5, -150, 0.5, -140)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+MainFrame.BackgroundTransparency = 0.15
+MainFrame.BorderSizePixel = 2
+MainFrame.BorderColor3 = Color3.fromRGB(255, 0, 0)
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
 
-local G = Instance.new("UICorner")
-G.Parent = F
-G.CornerRadius = UDim.new(0, 12)
+local corner = Instance.new("UICorner")
+corner.Parent = MainFrame
+corner.CornerRadius = UDim.new(0, 12)
 
-local H = Instance.new("TextLabel")
-H.Size = UDim2.new(1, 0, 0, 40)
-H.Position = UDim2.new(0, 0, 0, 5)
-H.BackgroundTransparency = 1
-H.Text = "🔥 PRO"
-H.TextSize = 20
-H.TextColor3 = Color3.fromRGB(255, 255, 255)
-H.Font = Enum.Font.GothamBold
-H.Parent = F
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.Position = UDim2.new(0, 0, 0, 5)
+Title.BackgroundTransparency = 1
+Title.Text = "🔥 PRO"
+Title.TextSize = 20
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.GothamBold
+Title.Parent = MainFrame
 
-local I = Instance.new("TextButton")
-I.Size = UDim2.new(0, 30, 0, 30)
-I.Position = UDim2.new(1, -35, 0, 5)
-I.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-I.Text = "✕"
-I.TextColor3 = Color3.fromRGB(255, 255, 255)
-I.TextSize = 16
-I.Font = Enum.Font.GothamBold
-I.BorderSizePixel = 0
-I.Parent = F
+local CloseButton = Instance.new("TextButton")
+CloseButton.Size = UDim2.new(0, 30, 0, 30)
+CloseButton.Position = UDim2.new(1, -35, 0, 5)
+CloseButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+CloseButton.Text = "✕"
+CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseButton.TextSize = 16
+CloseButton.Font = Enum.Font.GothamBold
+CloseButton.BorderSizePixel = 0
+CloseButton.Parent = MainFrame
 
-local J = Instance.new("UICorner")
-J.Parent = I
-J.CornerRadius = UDim.new(0, 6)
+local closeCorner = Instance.new("UICorner")
+closeCorner.Parent = CloseButton
+closeCorner.CornerRadius = UDim.new(0, 6)
 
-local function K(btn, state)
-    btn.Text = state and btn.Name .. ": ON" or btn.Name .. ": OFF"
-    btn.BackgroundColor3 = state and Color3.fromRGB(0, 150, 50) or Color3.fromRGB(150, 50, 50)
+local function updateButton(button, state)
+    button.Text = state and button.Name .. ": ON" or button.Name .. ": OFF"
+    button.BackgroundColor3 = state and Color3.fromRGB(0, 150, 50) or Color3.fromRGB(150, 50, 50)
 end
 
 -- Aimbot
-local L = Instance.new("TextButton")
-L.Size = UDim2.new(0, 250, 0, 40)
-L.Position = UDim2.new(0.5, -125, 0, 55)
-L.Name = "Aimbot"
-K(L, h)
-L.TextColor3 = Color3.fromRGB(255, 255, 255)
-L.Font = Enum.Font.GothamBold
-L.BorderSizePixel = 0
-L.Parent = F
+local AimbotButton = Instance.new("TextButton")
+AimbotButton.Size = UDim2.new(0, 250, 0, 40)
+AimbotButton.Position = UDim2.new(0.5, -125, 0, 55)
+AimbotButton.Name = "Aimbot"
+updateButton(AimbotButton, AimbotEnabled)
+AimbotButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+AimbotButton.Font = Enum.Font.GothamBold
+AimbotButton.BorderSizePixel = 0
+AimbotButton.Parent = MainFrame
 
-local M = Instance.new("UICorner")
-M.Parent = L
-M.CornerRadius = UDim.new(0, 8)
+local aimCorner = Instance.new("UICorner")
+aimCorner.Parent = AimbotButton
+aimCorner.CornerRadius = UDim.new(0, 8)
 
-L.MouseButton1Click:Connect(function()
-    h = not h
-    K(L, h)
+AimbotButton.MouseButton1Click:Connect(function()
+    AimbotEnabled = not AimbotEnabled
+    updateButton(AimbotButton, AimbotEnabled)
 end)
 
 -- ESP
-local N = Instance.new("TextButton")
-N.Size = UDim2.new(0, 250, 0, 40)
-N.Position = UDim2.new(0.5, -125, 0, 105)
-N.Name = "ESP"
-K(N, i)
-N.TextColor3 = Color3.fromRGB(255, 255, 255)
-N.Font = Enum.Font.GothamBold
-N.BorderSizePixel = 0
-N.Parent = F
+local ESPButton = Instance.new("TextButton")
+ESPButton.Size = UDim2.new(0, 250, 0, 40)
+ESPButton.Position = UDim2.new(0.5, -125, 0, 105)
+ESPButton.Name = "ESP"
+updateButton(ESPButton, ESPEnabled)
+ESPButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ESPButton.Font = Enum.Font.GothamBold
+ESPButton.BorderSizePixel = 0
+ESPButton.Parent = MainFrame
 
-local O = Instance.new("UICorner")
-O.Parent = N
-O.CornerRadius = UDim.new(0, 8)
+local espCorner = Instance.new("UICorner")
+espCorner.Parent = ESPButton
+espCorner.CornerRadius = UDim.new(0, 8)
 
-N.MouseButton1Click:Connect(function()
-    w()
-    K(N, i)
+ESPButton.MouseButton1Click:Connect(function()
+    toggleESP()
+    updateButton(ESPButton, ESPEnabled)
 end)
 
 -- Rejoin
-local P = Instance.new("TextButton")
-P.Size = UDim2.new(0, 250, 0, 40)
-P.Position = UDim2.new(0.5, -125, 0, 155)
-P.Text = "Rejoin"
-P.TextColor3 = Color3.fromRGB(255, 255, 255)
-P.Font = Enum.Font.GothamBold
-P.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-P.BorderSizePixel = 0
-P.Parent = F
+local RejoinButton = Instance.new("TextButton")
+RejoinButton.Size = UDim2.new(0, 250, 0, 40)
+RejoinButton.Position = UDim2.new(0.5, -125, 0, 155)
+RejoinButton.Text = "Rejoin"
+RejoinButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+RejoinButton.Font = Enum.Font.GothamBold
+RejoinButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+RejoinButton.BorderSizePixel = 0
+RejoinButton.Parent = MainFrame
 
-local Q = Instance.new("UICorner")
-Q.Parent = P
-Q.CornerRadius = UDim.new(0, 8)
+local rejoinCorner = Instance.new("UICorner")
+rejoinCorner.Parent = RejoinButton
+rejoinCorner.CornerRadius = UDim.new(0, 8)
 
-P.MouseButton1Click:Connect(D)
+RejoinButton.MouseButton1Click:Connect(rejoinServer)
 
 -- Exit
-local R = Instance.new("TextButton")
-R.Size = UDim2.new(0, 250, 0, 40)
-R.Position = UDim2.new(0.5, -125, 0, 205)
-R.Text = "Exit"
-R.TextColor3 = Color3.fromRGB(255, 255, 255)
-R.Font = Enum.Font.GothamBold
-R.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-R.BorderSizePixel = 0
-R.Parent = F
+local ExitButton = Instance.new("TextButton")
+ExitButton.Size = UDim2.new(0, 250, 0, 40)
+ExitButton.Position = UDim2.new(0.5, -125, 0, 205)
+ExitButton.Text = "Exit"
+ExitButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ExitButton.Font = Enum.Font.GothamBold
+ExitButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+ExitButton.BorderSizePixel = 0
+ExitButton.Parent = MainFrame
 
-local S = Instance.new("UICorner")
-S.Parent = R
-S.CornerRadius = UDim.new(0, 8)
+local exitCorner = Instance.new("UICorner")
+exitCorner.Parent = ExitButton
+exitCorner.CornerRadius = UDim.new(0, 8)
 
-R.MouseButton1Click:Connect(function()
+ExitButton.MouseButton1Click:Connect(function()
     game:Shutdown()
 end)
 
-I.MouseButton1Click:Connect(function()
-    F.Visible = false
+CloseButton.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
 end)
 
 -- ============================================================
 -- ⌨️ БИНДЫ
 -- ============================================================
 
-c.InputBegan:Connect(function(input, gameProcessed)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
 
     if input.KeyCode == Enum.KeyCode.RightShift then
-        F.Visible = not F.Visible
+        MainFrame.Visible = not MainFrame.Visible
     end
 
     if input.KeyCode == Enum.KeyCode.G then
-        w()
-        K(N, i)
+        toggleESP()
+        updateButton(ESPButton, ESPEnabled)
     end
 
     if input.KeyCode == Enum.KeyCode.H then
-        h = not h
-        K(L, h)
+        AimbotEnabled = not AimbotEnabled
+        updateButton(AimbotButton, AimbotEnabled)
     end
 end)
 
@@ -331,10 +344,10 @@ end)
 -- 👥 НОВЫЕ ИГРОКИ
 -- ============================================================
 
-a.PlayerAdded:Connect(function()
-    if i then
-        w()
-        w()
+Players.PlayerAdded:Connect(function()
+    if ESPEnabled then
+        toggleESP()
+        toggleESP()
     end
 end)
 
@@ -346,3 +359,4 @@ print("🔥 PRO загружен!")
 print("🔹 Shift — меню")
 print("🔹 G — ESP")
 print("🔹 H — Аимбот")
+print("🎯 Аимбот включён по умолчанию, игнорирует трупы")
