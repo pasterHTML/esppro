@@ -1,6 +1,6 @@
 -- ============================================================
--- 🔥 PRO ESP + AIMBOT (С ПЕРЕХВАТОМ ВЫСТРЕЛА)
--- Версия: 11.0
+-- 🔥 PRO ESP + AIMBOT (ДЛЯ DESERT EAGLE)
+-- Версия: 13.0
 -- ============================================================
 
 -- 🔓 БАЙПАС
@@ -39,29 +39,27 @@ local MaxDistance = 300
 local ESPRadius = 300
 local ESPObjects = {}
 
--- ============================================================
--- 🔍 ПОИСК REMOTEEVENT ДЛЯ ВЫСТРЕЛА
--- ============================================================
-
-local ShootRemote = nil
 local WeaponScript = nil
+local WeaponController = nil
+local WeaponConnected = false
 
--- Ищем RemoteEvent для выстрела
-local function findShootRemote()
-    -- Ищем в ReplicatedStorage
-    for _, child in pairs(ReplicatedStorage:GetDescendants()) do
-        if child:IsA("RemoteEvent") and (child.Name:lower():find("shoot") or child.Name:lower():find("fire") or child.Name:lower():find("gun")) then
-            ShootRemote = child
-            print("🔫 Найден RemoteEvent для выстрела: " .. child.Name)
+-- ============================================================
+-- 🔫 ПОДКЛЮЧЕНИЕ К DESERT EAGLE
+-- ============================================================
+
+local function findDesertEagle()
+    if not LocalPlayer.Character then return nil end
+    
+    -- Ищем Desert Eagle в персонаже
+    for _, child in pairs(LocalPlayer.Character:GetChildren()) do
+        if child.Name == "Desert Eagle" then
             return child
         end
     end
     
-    -- Ищем в Players
-    for _, child in pairs(LocalPlayer.PlayerGui:GetDescendants()) do
-        if child:IsA("RemoteEvent") and (child.Name:lower():find("shoot") or child.Name:lower():find("fire")) then
-            ShootRemote = child
-            print("🔫 Найден RemoteEvent в PlayerGui: " .. child.Name)
+    -- Если не нашли в Character, ищем в Backpack
+    for _, child in pairs(LocalPlayer.Backpack:GetChildren()) do
+        if child.Name == "Desert Eagle" then
             return child
         end
     end
@@ -69,37 +67,66 @@ local function findShootRemote()
     return nil
 end
 
--- Ищем скрипт оружия
-local function findWeaponScript()
-    if LocalPlayer.Character then
-        for _, child in pairs(LocalPlayer.Character:GetChildren()) do
-            if child:IsA("Tool") or child:IsA("Part") then
-                local script = child:FindFirstChild("Script")
-                if script and script:IsA("Script") then
-                    WeaponScript = script
-                    print("🔫 Найден скрипт оружия: " .. script.Name)
-                    return script
-                end
+local function getWeaponScript()
+    local weapon = findDesertEagle()
+    if not weapon then return nil end
+    
+    -- Ищем папку Scripts внутри Desert Eagle
+    local scriptsFolder = weapon:FindFirstChild("Scripts")
+    if scriptsFolder then
+        -- Ищем локальный скрипт внутри папки
+        for _, child in pairs(scriptsFolder:GetChildren()) do
+            if child:IsA("LocalScript") then
+                return child
             end
         end
     end
+    
+    -- Если папки Scripts нет, ищем скрипт прямо в Desert Eagle
+    for _, child in pairs(weapon:GetChildren()) do
+        if child:IsA("LocalScript") or child:IsA("Script") then
+            return child
+        end
+    end
+    
     return nil
 end
 
--- Подключаемся к оружию
 local function connectWeapon()
-    findWeaponScript()
-    findShootRemote()
+    if WeaponConnected then return end
+    
+    WeaponScript = getWeaponScript()
+    if WeaponScript then
+        WeaponConnected = true
+        print("🔫 Desert Eagle найден! Скрипт: " .. WeaponScript.Name)
+        
+        -- Пытаемся загрузить BlasterController через скрипт
+        pcall(function()
+            local BlasterController = require(ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Scripts"):WaitForChild("BlasterController"))
+            if BlasterController then
+                local weapon = findDesertEagle()
+                if weapon then
+                    WeaponController = BlasterController.new(weapon)
+                    print("✅ BlasterController создан!")
+                end
+            end
+        end)
+    else
+        print("⚠️ Desert Eagle не найден!")
+    end
 end
 
--- Следим за появлением оружия
+-- Следим за появлением Desert Eagle
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(1)
+    WeaponConnected = false
     WeaponScript = nil
-    ShootRemote = nil
+    WeaponController = nil
     connectWeapon()
 end)
 
+-- Пробуем подключиться сразу
+task.wait(1)
 connectWeapon()
 
 -- ============================================================
@@ -184,11 +211,11 @@ local function getClosestEnemy()
 end
 
 -- ============================================================
--- 🔫 АИМБОТ + СТРЕЛЬБА ЧЕРЕЗ REMOTEEVENT
+-- 🔫 АИМБОТ + СТРЕЛЬБА
 -- ============================================================
 
 local lastShotTime = 0
-local shootCooldown = 0.12
+local shootCooldown = 0.08
 
 RunService.RenderStepped:Connect(function()
     if not AimbotEnabled then return end
@@ -200,42 +227,34 @@ RunService.RenderStepped:Connect(function()
     local head = target.Character:FindFirstChild("Head")
     if not head then return end
     
-    -- Наводим камеру
     Camera.CFrame = CFrame.new(Camera.CFrame.Position, head.Position)
     
     -- ═══════════════════════════════════════════════
-    -- 🔫 СТРЕЛЬБА ЧЕРЕЗ REMOTEEVENT
+    -- 🔫 СТРЕЛЬБА ЧЕРЕЗ BLASTERCONTROLLER
     -- ═══════════════════════════════════════════════
     local currentTime = tick()
     if currentTime - lastShotTime >= shootCooldown then
         
-        -- Способ 1: Если нашли RemoteEvent — вызываем его
-        if ShootRemote then
+        -- Способ 1: Через BlasterController
+        if WeaponController and WeaponController.Shoot then
             pcall(function()
-                -- Пытаемся вызвать с разными аргументами
-                ShootRemote:FireServer(head.Position)
-                ShootRemote:FireServer(head.Position, target.Character)
-                ShootRemote:FireServer(target.Character, head.Position)
-                ShootRemote:FireServer(head)
+                WeaponController:Shoot()
+                lastShotTime = currentTime
             end)
-            lastShotTime = currentTime
-            
-        -- Способ 2: Если есть скрипт оружия — ищем в нём функцию выстрела
+        
+        -- Способ 2: Через окружение скрипта
         elseif WeaponScript then
             pcall(function()
-                -- Ищем функцию Shoot в окружении скрипта
                 local env = getfenv(WeaponScript)
                 if env and env.Shoot then
                     env.Shoot()
                 elseif env and env.Fire then
                     env.Fire()
-                elseif env and env.Activate then
-                    env.Activate()
                 end
+                lastShotTime = currentTime
             end)
-            lastShotTime = currentTime
             
-        -- Способ 3: Стандартный клик мыши (если ничего не помогло)
+        -- Способ 3: Через клик мыши
         else
             Mouse.Button1Down:Fire()
             task.wait(0.02)
@@ -497,8 +516,9 @@ LocalPlayer.CharacterAdded:Connect(function()
     if not CoreGui:FindFirstChild("M") then
         guiInstance = createGUI()
     end
+    WeaponConnected = false
     WeaponScript = nil
-    ShootRemote = nil
+    WeaponController = nil
     connectWeapon()
 end)
 
@@ -559,9 +579,9 @@ end)
 -- 📌 ИНФОРМАЦИЯ
 -- ============================================================
 
-print("🔥 PRO + AIMBOT загружен!")
+print("🔥 PRO + DESERT EAGLE загружен!")
 print("🔹 Shift — меню")
 print("🔹 G — ESP")
 print("🔹 H — Аимбот (с авто-стрельбой)")
 print("🔹 L — Wallbang")
-print("🔫 Попытка стрельбы через RemoteEvent")
+print("🔫 Desert Eagle найден: " .. tostring(WeaponScript ~= nil))
